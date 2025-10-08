@@ -1,0 +1,18 @@
+{
+    "name": "NumpyNN Python Dev Container",
+    "image": "mcr.microsoft.com/devcontainers/python:3.11",
+    "containerEnv": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "/workspaces/NumpyNN"
+    },
+    // Install Python requirements after numpy
+    "postCreateCommand": "pip install -r /workspaces/NumpyNN/.devcontainer/requirements.txt",
+    "customizations": {
+        "vscode": {
+            "settings": {},
+            "extensions": [
+                "ms-python.python"
+            ]
+        }
+    }
+}
