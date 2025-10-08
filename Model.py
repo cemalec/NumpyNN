@@ -26,3 +26,11 @@ class Model:
     
     def compute_loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
         return np.mean(self.loss.function(y_true, y_pred))
+    
+    def save(self, filepath: str):
+        np.savez(filepath, layers=self.layers, loss=self.loss)
+
+    def load(self, filepath: str):
+        data = np.load(filepath, allow_pickle=True)
+        self.layers = data['layers'].tolist()
+        self.loss = data['loss'].item()

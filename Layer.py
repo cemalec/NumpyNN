@@ -37,11 +37,11 @@ class DenseLayer:
         Returns:
             np.ndarray: Gradient of the loss with respect to the layer's input. Shape: (batch_size, input_size)
             """
-        activation_grad = self.activation_function.derivative(self.last_z)  # (batch_size, output_size)
-        delta = output_gradient * activation_grad  # (batch_size, output_size)
+        activation_gradient = self.activation_function.derivative(self.last_z)  # (batch_size, output_size)
+        delta = output_gradient * activation_gradient  # (batch_size, output_size)
 
         weight_gradient = np.dot(self.last_input.T, delta) / self.last_input.shape[0]  # (input_size, output_size)
-        bias_gradient = np.mean(delta, axis=0)  # (output_size,)
+        bias_gradient = np.sum(delta, axis=0) / self.last_input.shape[0] # (output_size,)
 
         input_gradient = np.dot(delta, self.weights.T)  # (batch_size, input_size)
 
@@ -50,3 +50,4 @@ class DenseLayer:
         self.biases -= learning_rate * bias_gradient
 
         return input_gradient
+    

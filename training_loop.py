@@ -8,8 +8,8 @@ import numpy as np
 from typing import List
 
 INPUT_SIZE = 28*28
-HIDDEN_SIZE1 = INPUT_SIZE * 5
-HIDDEN_SIZE2 = HIDDEN_SIZE1 // 2
+HIDDEN_SIZE1 = INPUT_SIZE * 10
+HIDDEN_SIZE2 = HIDDEN_SIZE1 // 5
 OUTPUT_SIZE = 10
 
 basic_model = Model(
@@ -59,7 +59,7 @@ if __name__ == "__main__":
                   dataset=train_dataset,
                   batch_size=32,
                   epochs=5,
-                  learning_rate=0.001)
+                  learning_rate=0.01)
     # Evaluate on training set
     y_train_pred = basic_model.predict(X_train)
     train_loss = basic_model.compute_loss(y_train, y_train_pred)
