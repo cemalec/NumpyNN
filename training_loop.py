@@ -1,6 +1,7 @@
 from Model import Model
 from Layer import DenseLayer
 from Dataset import *
+from Optimizer import *
 from metrics import *
 from DifferentiableFunction import DifferentiableFunction,SoftMax,ReLU,CrossEntropyLoss
 
@@ -13,20 +14,9 @@ HIDDEN_SIZE1 = 128
 HIDDEN_SIZE2 = 64
 OUTPUT_SIZE = 10
 
-basic_model = Model(
-    layers=[DenseLayer(input_size=INPUT_SIZE,
-                       output_size=HIDDEN_SIZE1,
-                       activation_function=ReLU()), 
-            DenseLayer(input_size=HIDDEN_SIZE1,
-                       output_size=HIDDEN_SIZE2,
-                       activation_function=ReLU()),
-            DenseLayer(input_size=HIDDEN_SIZE2,
-                       output_size=OUTPUT_SIZE,
-                       activation_function=SoftMax())],
-    loss=CrossEntropyLoss()
-)
 
-basic_model = Model.load('models/basic_model.npz')
+
+#basic_model = Model.load('models/optimizer_model.npz')
 def training_loop(model: Model, 
                   dataset: Dataset,
                   batch_size: int,
@@ -66,10 +56,24 @@ if __name__ == "__main__":
                            default=1e-1, 
                            help='Learning rate for optimizer')
     args = argparser.parse_args()
+
     epochs = args.epochs
     batch_size = args.batch_size
     learning_rate = args.learning_rate
 
+    basic_model = Model(
+        layers=[DenseLayer(input_size=INPUT_SIZE,
+                        output_size=HIDDEN_SIZE1,
+                        activation_function=ReLU()), 
+                DenseLayer(input_size=HIDDEN_SIZE1,
+                        output_size=HIDDEN_SIZE2,
+                        activation_function=ReLU()),
+                DenseLayer(input_size=HIDDEN_SIZE2,
+                        output_size=OUTPUT_SIZE,
+                        activation_function=SoftMax())],
+        loss=CrossEntropyLoss(),
+        optimizer=Adam(learning_rate=learning_rate)
+    )
     train_dataset = MNISTDataset(split='train')
     test_dataset = MNISTDataset(split='test')
     
@@ -83,7 +87,7 @@ if __name__ == "__main__":
                   batch_size=batch_size,
                   epochs=epochs,
                   learning_rate=learning_rate)
-    basic_model.save('models/basic_model.npz')
+    basic_model.save('models/adam_model.npz')
     # Evaluate on training set
     y_train_pred = basic_model.predict(X_train)
     train_loss = basic_model.compute_loss(y_train, y_train_pred)

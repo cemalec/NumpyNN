@@ -2,15 +2,20 @@ from typing import List
 import numpy as np
 from Layer import DenseLayer
 from DifferentiableFunction import DifferentiableFunction,SoftMax
-
+from Optimizer import *
 class Model:
     layers: List[DenseLayer]
     loss: DifferentiableFunction
+    optimizer: Optimizer
 
-    def __init__(self, layers: List[DenseLayer], loss: DifferentiableFunction):
+    def __init__(self, layers: List[DenseLayer], loss: DifferentiableFunction, optimizer: Optimizer):
         self.layers = layers
         self.loss = loss
-    
+        self.optimizer = optimizer
+        for layer in self.layers:
+            if layer.name is None:
+                layer.name = f"Layer_{self.layers.index(layer)}"
+
     def forward(self, x: np.ndarray) -> np.ndarray:
         for layer in self.layers:
             x = layer.forward(x)
@@ -19,7 +24,7 @@ class Model:
     def backward(self, y_true: np.ndarray, y_pred: np.ndarray, learning_rate: float):
         loss_grad = self.loss.derivative(y_true,y_pred)
         for layer in reversed(self.layers):
-            loss_grad = layer.backward(loss_grad, learning_rate)
+            loss_grad = layer.backward(loss_grad,self.optimizer)
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         return self.forward(x)
@@ -29,14 +34,18 @@ class Model:
     
     def save(self, filepath: str):
         np.savez(filepath,
-                 layers=[dict(input_size=layer.input_size,
+                 layers=[dict(name=layer.name,
+                              input_size=layer.input_size,
                               output_size=layer.output_size,
                               weights=layer.weights,
                               biases=layer.biases,
                               activation_function=layer.activation_function.__class__.__name__,
                               last_input=layer.last_input,
                               last_z=layer.last_z) for layer in self.layers],
-                 loss=self.loss.__class__.__name__)
+                 loss=self.loss.__class__.__name__,
+                 optimizer_name=self.optimizer.__class__.__name__,
+                 optimizer=self.optimizer.to_dict(),
+                 allows_pickle=True)
     
     @classmethod
     def load(cls, filepath: str):
@@ -47,11 +56,13 @@ class Model:
         for layer in load_layers:
             init_layer = DenseLayer(layer['input_size'],
                                     layer['output_size'],
-                                    activation_function=getattr(__import__('DifferentiableFunction'), layer['activation_function'])())
+                                    activation_function=getattr(__import__('DifferentiableFunction'), layer['activation_function'])(),
+                                    name=layer['name'])
             init_layer.weights = layer['weights']
             init_layer.biases = layer['biases']
             init_layer.last_input = layer['last_input']
             init_layer.last_z = layer['last_z']
             layers.append(init_layer)
         loss = getattr(__import__('DifferentiableFunction'), load_loss.item())()
-        return cls(layers=layers, loss=loss)
+        optimizer = getattr(__import__('Optimizer'), data['optimizer_name'].item()).from_dict(data['optimizer'].item()) 
+        return cls(layers=layers, loss=loss,optimizer=optimizer)

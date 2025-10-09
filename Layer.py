@@ -1,15 +1,18 @@
 import numpy as np
 from DifferentiableFunction import DifferentiableFunction
+from Optimizer import Optimizer
+from typing import Dict
 
 class DenseLayer:
     def __init__(self, 
                  input_size:int,
                  output_size: int, 
-                 activation_function: DifferentiableFunction):
+                 activation_function: DifferentiableFunction,
+                 name: str = None):
         self.input_size = input_size
         self.output_size = output_size
         self.activation_function = activation_function
-
+        self.name = name
         self.weights = np.random.randn(self.input_size, self.output_size) * (np.sqrt(2./self.input_size))
         self.biases = np.zeros(self.output_size)
         self.last_input = None
@@ -28,7 +31,7 @@ class DenseLayer:
         self.last_z = np.dot(input_data, self.weights) + self.biases  # (batch_size, output_size)
         return self.activation_function.function(self.last_z)
 
-    def backward(self, output_gradient: np.ndarray, learning_rate: float) -> np.ndarray:
+    def backward(self, output_gradient: np.ndarray, optimizer: Optimizer) -> np.ndarray:
         """
         Performs the backward pass through the layer, updating weights and biases.
         Parameters:
@@ -44,6 +47,20 @@ class DenseLayer:
         bias_gradient = np.sum(delta, axis=0) / self.last_input.shape[0] # (output_size,)
 
         input_gradient = np.dot(delta, self.weights.T)  # (batch_size, input_size)
-        self.weights -= learning_rate * weight_gradient
-        self.biases -= learning_rate * bias_gradient
+        
+        self.update_weights(optimizer=optimizer,
+                            grads={'weights': weight_gradient, 'biases': bias_gradient})
+        
         return input_gradient
+    
+    def update_weights(self,
+                       optimizer: Optimizer,
+                       grads: Dict[str,np.ndarray]):
+        """
+        Updates the weights and biases of the layer using the provided gradients.
+        Parameters:
+            weight_gradient (np.ndarray): Gradient of the loss with respect to the weights. Shape: (input_size, output_size)
+            bias_gradient (np.ndarray): Gradient of the loss with respect to the biases. Shape: (output_size,)
+            learning_rate (float): Learning rate for weight updates.
+        """
+        self.weights,self.biases = optimizer.step(self, grads)
