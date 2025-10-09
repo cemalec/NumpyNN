@@ -47,7 +47,9 @@ class DenseLayer:
 
         # Update weights and biases
         self.weights -= learning_rate * weight_gradient
-        self.biases -= learning_rate * bias_gradient
+        # L2 regularization
+        l2_lambda = 0.01  # You can make this a parameter of DenseLayer if needed
+        self.weights -= learning_rate * (weight_gradient + l2_lambda * self.weights)
+        self.biases -= learning_rate * (bias_gradient + l2_lambda * self.biases)
 
         return input_gradient
-    

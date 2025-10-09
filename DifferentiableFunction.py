@@ -52,8 +52,9 @@ class CrossEntropyLoss(DifferentiableFunction):
             return loss
 
         def cross_entropy_derivative(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
+            # Assumes y_pred is the output of softmax and y_true is one-hot encoded
             m = y_true.shape[0]
-            grad = y_pred - y_true
-            return grad / m
-
+            grad = (y_pred - y_true) / m
+            return grad
+            # shape[0] gives the batch size, so the derivative is averaged over the batch
         super().__init__(cross_entropy, cross_entropy_derivative)
