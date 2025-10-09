@@ -28,9 +28,30 @@ class Model:
         return np.mean(self.loss.function(y_true, y_pred))
     
     def save(self, filepath: str):
-        np.savez(filepath, layers=self.layers, loss=self.loss)
-
-    def load(self, filepath: str):
+        np.savez(filepath,
+                 layers=[dict(input_size=layer.input_size,
+                              output_size=layer.output_size,
+                              weights=layer.weights,
+                              biases=layer.biases,
+                              activation_function=layer.activation_function.__class__.__name__,
+                              last_input=layer.last_input,
+                              last_z=layer.last_z) for layer in self.layers],
+                 loss=self.loss.__class__.__name__)
+    
+    @classmethod
+    def load(cls, filepath: str):
         data = np.load(filepath, allow_pickle=True)
-        self.layers = data['layers'].tolist()
-        self.loss = data['loss'].item()
+        load_layers = data['layers']
+        load_loss = data['loss']
+        layers = []
+        for layer in load_layers:
+            init_layer = DenseLayer(layer['input_size'],
+                                    layer['output_size'],
+                                    activation_function=getattr(__import__('DifferentiableFunction'), layer['activation_function'])())
+            init_layer.weights = layer['weights']
+            init_layer.biases = layer['biases']
+            init_layer.last_input = layer['last_input']
+            init_layer.last_z = layer['last_z']
+            layers.append(init_layer)
+        loss = getattr(__import__('DifferentiableFunction'), load_loss.item())()
+        return cls(layers=layers, loss=loss)

@@ -6,6 +6,7 @@ from DifferentiableFunction import DifferentiableFunction,SoftMax,ReLU,CrossEntr
 
 import numpy as np
 from typing import List
+import argparse
 
 INPUT_SIZE = 28*28
 HIDDEN_SIZE1 = 128
@@ -25,6 +26,7 @@ basic_model = Model(
     loss=CrossEntropyLoss()
 )
 
+basic_model = Model.load('models/basic_model.npz')
 def training_loop(model: Model, 
                   dataset: Dataset,
                   batch_size: int,
@@ -35,7 +37,6 @@ def training_loop(model: Model,
         batch_accuracies = []
         batch_losses = []
         for x_train, y_train in dataset.get_batch(batch_size):
-
             # Forward pass
             y_pred = model.forward(x_train)
             # Compute loss
@@ -51,6 +52,24 @@ def training_loop(model: Model,
         print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Avg Accuracy: {avg_acc:.4f}")    
 
 if __name__ == "__main__":
+    argparser = argparse.ArgumentParser(description="Train a simple neural network on MNIST")
+    argparser.add_argument('--epochs', 
+                           type=int, 
+                           default=10, 
+                           help='Number of epochs to train')
+    argparser.add_argument('--batch_size', 
+                           type=int, 
+                           default=64, 
+                           help='Batch size for training')
+    argparser.add_argument('--learning_rate', 
+                           type=float, 
+                           default=1e-1, 
+                           help='Learning rate for optimizer')
+    args = argparser.parse_args()
+    epochs = args.epochs
+    batch_size = args.batch_size
+    learning_rate = args.learning_rate
+
     train_dataset = MNISTDataset(split='train')
     test_dataset = MNISTDataset(split='test')
     
@@ -61,9 +80,9 @@ if __name__ == "__main__":
     
     training_loop(model=basic_model,
                   dataset=train_dataset,
-                  batch_size=64,
-                  epochs=100,
-                  learning_rate=1e-1)
+                  batch_size=batch_size,
+                  epochs=epochs,
+                  learning_rate=learning_rate)
     basic_model.save('models/basic_model.npz')
     # Evaluate on training set
     y_train_pred = basic_model.predict(X_train)
