@@ -8,8 +8,8 @@ import numpy as np
 from typing import List
 
 INPUT_SIZE = 28*28
-HIDDEN_SIZE1 = INPUT_SIZE * 2
-HIDDEN_SIZE2 = HIDDEN_SIZE1 * 4
+HIDDEN_SIZE1 = 128
+HIDDEN_SIZE2 = 64
 OUTPUT_SIZE = 10
 
 basic_model = Model(
@@ -32,20 +32,23 @@ def training_loop(model: Model,
                   learning_rate: float):
     for epoch in range(epochs):
         i = 0
+        batch_accuracies = []
+        batch_losses = []
         for x_train, y_train in dataset.get_batch(batch_size):
 
             # Forward pass
             y_pred = model.forward(x_train)
             # Compute loss
             loss = model.compute_loss(y_train, y_pred)
-            
+            batch_losses.append(loss)
             # Backward pass
             model.backward(y_train, y_pred, learning_rate)
-            if i % 100 == 0:
-                print(f"Batch {i} Loss:", loss)
-                print(f"Batch {i} Accuracy:", accuracy(y_train, y_pred))
+            batch_acc = accuracy(y_train, y_pred)
+            batch_accuracies.append(batch_acc)
             i+=1
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {loss:.4f}")    
+        avg_acc = np.mean(batch_accuracies)
+        avg_loss = np.mean(batch_losses)
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Avg Accuracy: {avg_acc:.4f}")    
 
 if __name__ == "__main__":
     train_dataset = MNISTDataset(split='train')
@@ -58,9 +61,10 @@ if __name__ == "__main__":
     
     training_loop(model=basic_model,
                   dataset=train_dataset,
-                  batch_size=32,
-                  epochs=5,
-                  learning_rate=0.001)
+                  batch_size=64,
+                  epochs=100,
+                  learning_rate=1e-1)
+    basic_model.save('models/basic_model.npz')
     # Evaluate on training set
     y_train_pred = basic_model.predict(X_train)
     train_loss = basic_model.compute_loss(y_train, y_train_pred)

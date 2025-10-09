@@ -10,7 +10,7 @@ class DenseLayer:
         self.output_size = output_size
         self.activation_function = activation_function
 
-        self.weights = np.random.randn(self.input_size, self.output_size) * 0.01
+        self.weights = np.random.randn(self.input_size, self.output_size) * (np.sqrt(2./self.input_size))
         self.biases = np.zeros(self.output_size)
         self.last_input = None
         self.last_z = None
@@ -44,12 +44,6 @@ class DenseLayer:
         bias_gradient = np.sum(delta, axis=0) / self.last_input.shape[0] # (output_size,)
 
         input_gradient = np.dot(delta, self.weights.T)  # (batch_size, input_size)
-
-        # Update weights and biases
         self.weights -= learning_rate * weight_gradient
-        # L2 regularization
-        l2_lambda = 0.01  # You can make this a parameter of DenseLayer if needed
-        self.weights -= learning_rate * (weight_gradient + l2_lambda * self.weights)
-        self.biases -= learning_rate * (bias_gradient + l2_lambda * self.biases)
-
+        self.biases -= learning_rate * bias_gradient
         return input_gradient
