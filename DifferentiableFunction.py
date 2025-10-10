@@ -47,7 +47,7 @@ class CrossEntropyLoss(DifferentiableFunction):
         def cross_entropy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
             m = y_true.shape[0]
             p = y_pred
-            log_likelihood = -np.log(p[range(m), y_true.argmax(axis=1)])
+            log_likelihood = -np.log(p[range(m), y_true.argmax(axis=1)]+1e-15)
             loss = np.sum(log_likelihood) / m
             return loss
 

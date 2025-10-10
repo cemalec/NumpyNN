@@ -52,7 +52,8 @@ class Adam(Optimizer):
         if self.m.get(layer.name) is None:
             self.initialize_state(layer)
         params = {'weights': layer.weights, 'biases': layer.biases}
-        self.t += 1
+        if self.t < 1000:
+            self.t += 1
         for key in ['weights', 'biases']:
             self.m[layer.name][key] = self.beta1 * self.m[layer.name][key]  + (1 - self.beta1) * grads[key]
             self.v[layer.name][key]  = self.beta2 * self.v[layer.name][key]  + (1 - self.beta2) * (grads[key] ** 2)

@@ -8,11 +8,15 @@ class DenseLayer:
                  input_size:int,
                  output_size: int, 
                  activation_function: DifferentiableFunction,
-                 name: str = None):
+                 name: str = None,
+                 regularization: str = None,
+                 lambda_reg: float = 0.01):
         self.input_size = input_size
         self.output_size = output_size
         self.activation_function = activation_function
         self.name = name
+        self.lambda_reg = lambda_reg
+        self.regularization = regularization
         self.weights = np.random.randn(self.input_size, self.output_size) * (np.sqrt(2./self.input_size))
         self.biases = np.zeros(self.output_size)
         self.last_input = None
@@ -46,6 +50,14 @@ class DenseLayer:
         weight_gradient = np.dot(self.last_input.T, delta) / self.last_input.shape[0]  # (input_size, output_size)
         bias_gradient = np.sum(delta, axis=0) / self.last_input.shape[0] # (output_size,)
 
+        if self.regularization == 'l2':
+            weight_gradient += self.lambda_reg * self.weights
+            bias_gradient += self.lambda_reg * self.biases
+        elif self.regularization == 'l1':
+            weight_gradient += self.lambda_reg * np.sign(self.weights)
+            bias_gradient += self.lambda_reg * np.sign(self.biases)
+        else:
+            pass  # No regularization
         input_gradient = np.dot(delta, self.weights.T)  # (batch_size, input_size)
         
         self.update_weights(optimizer=optimizer,
