@@ -3,34 +3,87 @@ from typing import Dict,Any
 import numpy as np
 
 class Optimizer:
-    def __init__(self, learning_rate: float):
-        self.learning_rate = learning_rate
-    
+    def __init__(self):
+        self.name = self.__class__.__name__
+        self.type = 'Optimizer'
     @abstractmethod
     def step(self, layer: Any, grads: Dict[str,np.ndarray]) -> np.ndarray:
         pass
-
-    def to_dict(self) -> dict:
-        return {'learning_rate': self.learning_rate}
+    
+    @abstractmethod
+    def to_dict(self) -> Dict[str,Any]:
+        pass
     
     @classmethod
-    def from_dict(cls, data: dict):
-        return cls(**data)
+    @abstractmethod
+    def from_dict(cls, config: Dict[str,Any]) -> 'Optimizer':
+        pass
     
 class SGD(Optimizer):
+    def __init__(self, learning_rate: float):
+        super().__init__()
+        self.learning_rate = learning_rate
+        self.type = 'SGD'
+    
     def step(self, layer, grads: np.ndarray) -> np.ndarray:
         params={'weights': layer.weights,'biases': layer.biases} 
         for key in ['weights','biases']:
             params[key] -= self.learning_rate * grads[key]
         return params['weights'], params['biases']
+    def to_dict(self) -> dict:
+        return {'learning_rate': self.learning_rate}
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(learning_rate=data['learning_rate'])
+
+class RMSProp(Optimizer):
+    def __init__(self, learning_rate: float, beta: float = 0.9, epsilon: float = 1e-8):
+        super().__init__()
+        self.type = 'RMSProp'
+        self.learning_rate = learning_rate
+        self.beta = beta
+        self.epsilon = epsilon
+        self.s = dict()
     
+    def initialize_state(self,layer: Any):
+        self.s[layer.name] = dict()
+        self.s[layer.name]['weights'] = np.zeros_like(layer.weights)
+        self.s[layer.name]['biases'] = np.zeros_like(layer.biases)
+
+    def step(self,
+             layer: Any,
+             grads: Dict[str,np.ndarray]) -> np.ndarray:
+        if self.s.get(layer.name) is None:
+            self.initialize_state(layer)
+        params = {'weights': layer.weights, 'biases': layer.biases}
+        for key in ['weights', 'biases']:
+            self.s[layer.name][key] = self.beta * self.s[layer.name][key] + (1 - self.beta) * (grads[key] ** 2)
+            params[key] -= self.learning_rate * grads[key] / (np.sqrt(self.s[layer.name][key]) + self.epsilon)
+        return params['weights'], params['biases']
+    
+    def to_dict(self) -> dict:
+        base_dict = super().to_dict()
+        base_dict.update({'learning_rate': self.learning_rate,
+                          'beta': self.beta, 
+                          'epsilon': self.epsilon,
+                          'type': self.type})
+        return base_dict
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(learning_rate=data['learning_rate'],
+                   beta=data.get('beta', 0.9),
+                   epsilon=data.get('epsilon', 1e-8))
+     
 class Adam(Optimizer):
     def __init__(self, 
                  learning_rate: float, 
                  beta1: float = 0.9, 
                  beta2: float = 0.999, 
                  epsilon: float = 1e-8):
-        super().__init__(learning_rate)
+        super().__init__()
+        self.type = 'Adam'
+        self.learning_rate = learning_rate
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
@@ -63,14 +116,12 @@ class Adam(Optimizer):
         return params['weights'], params['biases']
     
     def to_dict(self) -> dict:
-        base_dict = super().to_dict()
-        base_dict.update({'beta1': self.beta1, 
+        return {'beta1': self.beta1, 
                           'beta2': self.beta2, 
                           'epsilon': self.epsilon,
                           'm': self.m,
                           'v': self.v,
-                          't': self.t})
-        return base_dict
+                          't': self.t}
     
     @classmethod
     def from_dict(cls, data: dict):

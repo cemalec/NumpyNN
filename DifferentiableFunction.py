@@ -8,7 +8,7 @@ class DifferentiableFunction:
     def __init__(self, function: Callable[[np.ndarray], np.ndarray], derivative: Callable[[np.ndarray], np.ndarray]):
         self.function = function
         self.derivative = derivative
-
+    
 class SoftMax(DifferentiableFunction):
     def __init__(self):
         def softmax(x: np.ndarray) -> np.ndarray:

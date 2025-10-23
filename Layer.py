@@ -2,25 +2,68 @@ import numpy as np
 from DifferentiableFunction import DifferentiableFunction
 from Optimizer import Optimizer
 from typing import Dict
+from abc import abstractmethod
+
+class Layer:
+    def __init__(self):
+        self.name = None
+        self.type = 'Layer'
+        self.weights = None
+        self.biases = None
+        self.last_input = None
+        self.last_z = None
+
+    @abstractmethod
+    def initialize_weights(self):
+        pass
+
+    @abstractmethod
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        pass
+
+    @abstractmethod
+    def backward(self, output_gradient: np.ndarray) -> Dict[str,np.ndarray]:
+        pass
+
+    @abstractmethod
+    def to_dict(self) -> Dict:
+        pass
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, data: Dict) -> 'Layer':
+        pass
 
 class DenseLayer:
+    """
+    A fully connected neural network layer.
+    
+     Parameters:
+        input_size (int): The number of input features.
+        output_size (int): The number of output features (neurons).
+        activation_function (DifferentiableFunction): The activation function to apply.
+        name (str, optional): Name of the layer. Defaults to None.
+    """
+
     def __init__(self, 
                  input_size:int,
                  output_size: int, 
                  activation_function: DifferentiableFunction,
-                 name: str = None,
-                 regularization: str = None,
-                 lambda_reg: float = 0.01):
+                 name: str = None):
+
+        super().__init__()
+        self.name = name
+        self.type = 'Dense'
         self.input_size = input_size
         self.output_size = output_size
         self.activation_function = activation_function
-        self.name = name
-        self.lambda_reg = lambda_reg
-        self.regularization = regularization
+        self.initialize_weights()
+
+    def initialize_weights(self):
+        """
+        initialize weights with He initialization.
+        """
         self.weights = np.random.randn(self.input_size, self.output_size) * (np.sqrt(2./self.input_size))
         self.biases = np.zeros(self.output_size)
-        self.last_input = None
-        self.last_z = None
 
     def forward(self, input_data: np.ndarray) -> np.ndarray:
         """
@@ -35,7 +78,7 @@ class DenseLayer:
         self.last_z = np.dot(input_data, self.weights) + self.biases  # (batch_size, output_size)
         return self.activation_function.function(self.last_z)
 
-    def backward(self, output_gradient: np.ndarray, optimizer: Optimizer) -> np.ndarray:
+    def backward(self, output_gradient: np.ndarray) -> Dict[str,np.ndarray]:
         """
         Performs the backward pass through the layer, updating weights and biases.
         Parameters:
@@ -50,29 +93,29 @@ class DenseLayer:
         weight_gradient = np.dot(self.last_input.T, delta) / self.last_input.shape[0]  # (input_size, output_size)
         bias_gradient = np.sum(delta, axis=0) / self.last_input.shape[0] # (output_size,)
 
-        if self.regularization == 'l2':
-            weight_gradient += self.lambda_reg * self.weights
-            bias_gradient += self.lambda_reg * self.biases
-        elif self.regularization == 'l1':
-            weight_gradient += self.lambda_reg * np.sign(self.weights)
-            bias_gradient += self.lambda_reg * np.sign(self.biases)
-        else:
-            pass  # No regularization
         input_gradient = np.dot(delta, self.weights.T)  # (batch_size, input_size)
+        grad_dict = {'inputs': input_gradient,
+                     'weights': weight_gradient,
+                     'biases': bias_gradient}
         
-        self.update_weights(optimizer=optimizer,
-                            grads={'weights': weight_gradient, 'biases': bias_gradient})
-        
-        return input_gradient
+        return grad_dict
+
+        # Update weights and biases will be handled by the optimizer in Model.py
+
+    def to_dict(self) -> Dict:
+        return {
+            'name': self.name,
+            'type': self.type,
+            'input_size': self.input_size,
+            'output_size': self.output_size,
+            'activation_function': self.activation_function.__class__.__name__,
+        }
     
-    def update_weights(self,
-                       optimizer: Optimizer,
-                       grads: Dict[str,np.ndarray]):
-        """
-        Updates the weights and biases of the layer using the provided gradients.
-        Parameters:
-            weight_gradient (np.ndarray): Gradient of the loss with respect to the weights. Shape: (input_size, output_size)
-            bias_gradient (np.ndarray): Gradient of the loss with respect to the biases. Shape: (output_size,)
-            learning_rate (float): Learning rate for weight updates.
-        """
-        self.weights,self.biases = optimizer.step(self, grads)
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'DenseLayer':
+        activation_function = getattr(__import__('DifferentiableFunction'), data['activation_function'])()
+        layer = cls(input_size=data['input_size'],
+                    output_size=data['output_size'],
+                    activation_function=activation_function,
+                    name=data['name'])
+        return layer

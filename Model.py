@@ -3,6 +3,7 @@ import numpy as np
 from Layer import DenseLayer
 from DifferentiableFunction import DifferentiableFunction,SoftMax
 from Optimizer import *
+
 class Model:
     layers: List[DenseLayer]
     loss: DifferentiableFunction
@@ -23,14 +24,30 @@ class Model:
     
     def backward(self, y_true: np.ndarray, y_pred: np.ndarray, learning_rate: float):
         loss_grad = self.loss.derivative(y_true,y_pred)
+        grad_dict = {'inputs': loss_grad}
         for layer in reversed(self.layers):
-            loss_grad = layer.backward(loss_grad,self.optimizer)
+            grad_dict = layer.backward(grad_dict['inputs'])
+            self.optimizer.step(layer,grad_dict)
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         return self.forward(x)
     
     def compute_loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
         return np.mean(self.loss.function(y_true, y_pred))
+    
+    def to_dict(self):
+        return {
+            'layers': [layer.to_dict() for layer in self.layers],
+            'loss': self.loss.__class__.__name__,
+            'optimizer': self.optimizer.to_dict()
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        layers = [DenseLayer.from_dict(layer_data) for layer_data in data['layers']]
+        loss = getattr(__import__('DifferentiableFunction'), data['loss'])()
+        optimizer = getattr(__import__('Optimizer'), data['optimizer']['type']).from_dict(data['optimizer'])
+        return cls(layers=layers, loss=loss, optimizer=optimizer)
     
     def save(self, filepath: str):
         np.savez(filepath,

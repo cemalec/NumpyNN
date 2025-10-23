@@ -3,6 +3,7 @@ import pandas as pd
 from typing import List,Literal
 import io
 from PIL import Image
+from abc import abstractmethod
 
 class Dataset:
     def __init__(self, X: np.ndarray, y: np.ndarray):
@@ -28,6 +29,10 @@ class Dataset:
         X_train, y_train = self.X[:split_idx], self.y[:split_idx]
         X_val, y_val = self.X[split_idx:], self.y[split_idx:]
         return Dataset(X_train, y_train), Dataset(X_val, y_val)
+    
+    @abstractmethod
+    def download(self):
+        pass  # Placeholder for dataset download logic
     
 class ParquetDataset(Dataset):
     def __init__(self, file_path: str, feature_cols: list, label_col: str):

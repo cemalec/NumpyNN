@@ -10,7 +10,7 @@ from typing import List
 import argparse
 
 INPUT_SIZE = 28*28
-HIDDEN_SIZE1 = 128
+HIDDEN_SIZE1 = 96
 HIDDEN_SIZE2 = 64
 OUTPUT_SIZE = 10
 
@@ -27,9 +27,11 @@ def training_loop(model: Model,
         for x_train, y_train in dataset.get_batch(batch_size):
             # Forward pass
             y_pred = model.forward(x_train)
+            
             # Compute loss
             loss = model.compute_loss(y_train, y_pred)
             batch_losses.append(loss)
+            
             # Backward pass
             model.backward(y_train, y_pred, learning_rate)
             batch_acc = accuracy(y_train, y_pred)
@@ -43,11 +45,11 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Train a simple neural network on MNIST")
     argparser.add_argument('--epochs', 
                            type=int, 
-                           default=10, 
+                           default=20, 
                            help='Number of epochs to train')
     argparser.add_argument('--batch_size', 
                            type=int, 
-                           default=64, 
+                           default=32, 
                            help='Batch size for training')
     argparser.add_argument('--learning_rate', 
                            type=float, 
@@ -61,21 +63,18 @@ if __name__ == "__main__":
 
     basic_model = Model(
         layers=[DenseLayer(input_size=INPUT_SIZE,
-                        output_size=HIDDEN_SIZE1,
-                        activation_function=ReLU(),
-                        regularization='l2',
-                        lambda_reg=1e-6), 
+                           output_size=HIDDEN_SIZE1,
+                           activation_function=ReLU()), 
                 DenseLayer(input_size=HIDDEN_SIZE1,
-                        output_size=HIDDEN_SIZE2,
-                        activation_function=ReLU(),
-                        regularization='l1',
-                        lambda_reg=1e-9),
+                           output_size=HIDDEN_SIZE2,
+                           activation_function=ReLU()),
                 DenseLayer(input_size=HIDDEN_SIZE2,
-                            output_size=OUTPUT_SIZE,
-                            activation_function=SoftMax())],
+                           output_size=OUTPUT_SIZE,
+                           activation_function=SoftMax())],
         loss=CrossEntropyLoss(),
         optimizer=Adam(learning_rate=learning_rate)
     )
+    
     train_dataset = MNISTDataset(split='train')
     test_dataset = MNISTDataset(split='test')
     
@@ -90,11 +89,13 @@ if __name__ == "__main__":
                   epochs=epochs,
                   learning_rate=learning_rate)
     basic_model.save('models/bigger_model.npz')
+    
     # Evaluate on training set
     y_train_pred = basic_model.predict(X_train)
     train_loss = basic_model.compute_loss(y_train, y_train_pred)
     print(f"Train Loss: {train_loss:.4f}")
     print(f"Train Accuracy: {accuracy(y_train, y_train_pred):.4f}")
+    
     # Evaluate on test set
     y_test_pred = basic_model.predict(X_test)
     test_loss = basic_model.compute_loss(y_test, y_test_pred)
