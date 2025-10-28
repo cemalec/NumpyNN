@@ -98,14 +98,16 @@ class DenseLayer(Layer):
         da_dz = self.activation_function.derivative(self.last_z)  # (batch_size, output_size)
         # The gradient of the loss with respect to the scores
         dL_dz = dL_da * da_dz  # (batch_size, output_size)
-        
+        # The gradient of the scores with respect to weights, biases, and inputs
         dz_dW = self.last_input  # (batch_size, input_size)
         dz_db = 1  # Bias gradient is summed over batch
         dz_di = self.weights  # (input_size, output_size)
-        weight_gradient = np.dot(dz_dW.T, dL_dz) / batches  # (input_size, output_size)
-        bias_gradient = np.sum(dL_dz*dz_db, axis=0) / batches # (output_size,)
 
-        input_gradient = np.dot(dL_dz, dz_di.T)  # (batch_size, input_size)
+        # The gradent of the loss with respect to *this* layer's weights, biases, and inputs
+        weight_gradient = np.dot(dz_dW.T, dL_dz) / batches  # (input_size, output_size), used for weight update
+        bias_gradient = np.sum(dL_dz*dz_db, axis=0) / batches # (output_size,), used for bias update
+        input_gradient = np.dot(dL_dz, dz_di.T)  # (batch_size, input_size), passed to previous layer
+
         logger.debug(f"Backward pass in layer {self.name}: output_gradient shape {dL_da.shape}, input_gradient shape {input_gradient.shape}") 
         grad_dict = {'inputs': input_gradient,
                      'weights': weight_gradient,

@@ -18,14 +18,14 @@ OUTPUT_SIZE = 10
 #basic_model = Model.load('models/adam_model.npz')
 def training_loop(model: Model, 
                   dataset: Dataset,
+                  epochs: int,
                   batch_size: int,
-                  epochs: int, 
                   learning_rate: float):
     for epoch in range(epochs):
         i = 0
         batch_accuracies = []
         batch_losses = []
-        for x_train, y_train in dataset.get_batch(batch_size):
+        for x_train, y_train in dataset.get_batches(batch_size):
             # Forward pass
             y_pred = model.forward(x_train)
             
@@ -40,7 +40,7 @@ def training_loop(model: Model,
             i+=1
         avg_acc = np.mean(batch_accuracies)
         avg_loss = np.mean(batch_losses)
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Avg Accuracy: {avg_acc:.4f}")    
+        logging.INFO(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Avg Accuracy: {avg_acc:.4f}")    
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Train a simple neural network on MNIST")
@@ -82,7 +82,6 @@ if __name__ == "__main__":
     
     train_dataset = MNISTDataset(split='train')
     test_dataset = MNISTDataset(split='test')
-    
     X_train, y_train = train_dataset.X, train_dataset.y
     X_test, y_test = test_dataset.X, test_dataset.y
     print("Training data shape:", X_train.shape, y_train.shape)
@@ -90,8 +89,8 @@ if __name__ == "__main__":
     
     training_loop(model=basic_model,
                   dataset=train_dataset,
-                  batch_size=batch_size,
                   epochs=epochs,
+                  batch_size=batch_size,
                   learning_rate=learning_rate)
     basic_model.save('models/bigger_model.npz')
     
