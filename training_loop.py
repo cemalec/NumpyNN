@@ -10,10 +10,14 @@ from typing import List
 import argparse
 import logging
 
+# Model configuration
 INPUT_SIZE = 28*28
 HIDDEN_SIZE1 = 64
 HIDDEN_SIZE2 = 32
 OUTPUT_SIZE = 10
+
+# Create logger
+logger = logging.getLogger(__name__)
 
 #basic_model = Model.load('models/adam_model.npz')
 def training_loop(model: Model, 
@@ -33,14 +37,16 @@ def training_loop(model: Model,
             loss = model.compute_loss(y_train, y_pred)
             batch_losses.append(loss)
             
-            # Backward pass
+            # Backward pass (weights update as part of the optimizer step in Model.backward)
             model.backward(y_train, y_pred, learning_rate)
+
+            # Compute accuracy
             batch_acc = accuracy(y_train, y_pred)
             batch_accuracies.append(batch_acc)
             i+=1
         avg_acc = np.mean(batch_accuracies)
         avg_loss = np.mean(batch_losses)
-        logging.INFO(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Avg Accuracy: {avg_acc:.4f}")    
+        logger.info(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Avg Accuracy: {avg_acc:.4f}")    
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Train a simple neural network on MNIST")
@@ -59,13 +65,19 @@ if __name__ == "__main__":
     argparser.add_argument('--log_level',
                            type=str,
                            default='INFO')
-    
+    # Parse command line arguments    
     args = argparser.parse_args()
-
     epochs = args.epochs
     batch_size = args.batch_size
     learning_rate = args.learning_rate
-    logging.basicConfig(level=getattr(logging, args.log_level.upper(), None))
+    
+    # Configure logging
+    logging.basicConfig(level=getattr(logging, 
+                                      args.log_level.upper(), None),
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger.info(f"Starting training for {epochs} epochs with batch size {batch_size} and learning rate {learning_rate}")
+    
+    # Define Model
     basic_model = Model(
         layers=[DenseLayer(input_size=INPUT_SIZE,
                            output_size=HIDDEN_SIZE1,
@@ -80,6 +92,7 @@ if __name__ == "__main__":
         optimizer=Adam(learning_rate=learning_rate)
     )
     
+    # Load Dataset
     train_dataset = MNISTDataset(split='train')
     test_dataset = MNISTDataset(split='test')
     X_train, y_train = train_dataset.X, train_dataset.y
@@ -87,22 +100,25 @@ if __name__ == "__main__":
     print("Training data shape:", X_train.shape, y_train.shape)
     print("Testing data shape:", X_test.shape, y_test.shape)
     
+    # Train Model
     training_loop(model=basic_model,
                   dataset=train_dataset,
                   epochs=epochs,
                   batch_size=batch_size,
                   learning_rate=learning_rate)
+    
+    # Save Model
     basic_model.save('models/bigger_model.npz')
     
     # Evaluate on training set
     y_train_pred = basic_model.predict(X_train)
     train_loss = basic_model.compute_loss(y_train, y_train_pred)
-    print(f"Train Loss: {train_loss:.4f}")
-    print(f"Train Accuracy: {accuracy(y_train, y_train_pred):.4f}")
-    
+    logging.info(f"Train Loss: {train_loss:.4f}")
+    logging.info(f"Train Accuracy: {accuracy(y_train, y_train_pred):.4f}")
+
     # Evaluate on test set
     y_test_pred = basic_model.predict(X_test)
     test_loss = basic_model.compute_loss(y_test, y_test_pred)
     test_accuracy = accuracy(y_test, y_test_pred)
-    print(f"Test Loss: {test_loss:.4f}")
-    print(f"Test Accuracy: {test_accuracy:.4f}")
+    logging.info(f"Test Loss: {test_loss:.4f}")
+    logging.info(f"Test Accuracy: {test_accuracy:.4f}")
