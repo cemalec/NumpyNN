@@ -1,8 +1,10 @@
 import numpy as np
 from DifferentiableFunction import DifferentiableFunction
-from Optimizer import Optimizer
 from typing import Dict
 from abc import abstractmethod
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Layer:
     def __init__(self):
@@ -12,6 +14,7 @@ class Layer:
         self.biases = None
         self.last_input = None
         self.last_z = None
+        self.weights_initialized = False
 
     @abstractmethod
     def initialize_weights(self):
@@ -19,7 +22,9 @@ class Layer:
 
     @abstractmethod
     def forward(self, input_data: np.ndarray) -> np.ndarray:
-        pass
+        if self.weights_initialized is False:
+            self.initialize_weights()
+            self.weights_initialized = True
 
     @abstractmethod
     def backward(self, output_gradient: np.ndarray) -> Dict[str,np.ndarray]:
@@ -33,7 +38,7 @@ class Layer:
     def from_dict(cls, data: Dict) -> 'Layer':
         pass
 
-class DenseLayer:
+class DenseLayer(Layer):
     """
     A fully connected neural network layer.
     
@@ -49,14 +54,12 @@ class DenseLayer:
                  output_size: int, 
                  activation_function: DifferentiableFunction,
                  name: str = None):
-
         super().__init__()
         self.name = name
         self.type = 'Dense'
         self.input_size = input_size
         self.output_size = output_size
         self.activation_function = activation_function
-        self.initialize_weights()
 
     def initialize_weights(self):
         """
@@ -64,6 +67,7 @@ class DenseLayer:
         """
         self.weights = np.random.randn(self.input_size, self.output_size) * (np.sqrt(2./self.input_size))
         self.biases = np.zeros(self.output_size)
+        logger.info(f"Weights and biases initialized for layer {self.name}")
 
     def forward(self, input_data: np.ndarray) -> np.ndarray:
         """
@@ -74,8 +78,10 @@ class DenseLayer:
         Returns:
             np.ndarray: Output after applying weights, biases, and activation function. Shape: (batch_size, output_size)
         """
+        super().forward(input_data)
         self.last_input = input_data
         self.last_z = np.dot(input_data, self.weights) + self.biases  # (batch_size, output_size)
+        logger.debug(f"Forward pass in layer {self.name}: input shape {input_data.shape}, z shape {self.last_z.shape}")
         return self.activation_function.function(self.last_z)
 
     def backward(self, output_gradient: np.ndarray) -> Dict[str,np.ndarray]:
@@ -94,6 +100,7 @@ class DenseLayer:
         bias_gradient = np.sum(delta, axis=0) / self.last_input.shape[0] # (output_size,)
 
         input_gradient = np.dot(delta, self.weights.T)  # (batch_size, input_size)
+        logger.debug(f"Backward pass in layer {self.name}: output_gradient shape {output_gradient.shape}, input_gradient shape {input_gradient.shape}") 
         grad_dict = {'inputs': input_gradient,
                      'weights': weight_gradient,
                      'biases': bias_gradient}

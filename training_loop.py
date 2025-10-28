@@ -8,10 +8,11 @@ from DifferentiableFunction import DifferentiableFunction,SoftMax,ReLU,CrossEntr
 import numpy as np
 from typing import List
 import argparse
+import logging
 
 INPUT_SIZE = 28*28
-HIDDEN_SIZE1 = 96
-HIDDEN_SIZE2 = 64
+HIDDEN_SIZE1 = 64
+HIDDEN_SIZE2 = 32
 OUTPUT_SIZE = 10
 
 #basic_model = Model.load('models/adam_model.npz')
@@ -53,14 +54,18 @@ if __name__ == "__main__":
                            help='Batch size for training')
     argparser.add_argument('--learning_rate', 
                            type=float, 
-                           default=1e-1, 
+                           default=1e-3, 
                            help='Learning rate for optimizer')
+    argparser.add_argument('--log_level',
+                           type=str,
+                           default='INFO')
+    
     args = argparser.parse_args()
 
     epochs = args.epochs
     batch_size = args.batch_size
     learning_rate = args.learning_rate
-
+    logging.basicConfig(level=getattr(logging, args.log_level.upper(), None))
     basic_model = Model(
         layers=[DenseLayer(input_size=INPUT_SIZE,
                            output_size=HIDDEN_SIZE1,

@@ -4,8 +4,9 @@ import numpy as np
 
 class Optimizer:
     def __init__(self):
-        self.name = self.__class__.__name__
+        self.name = None
         self.type = 'Optimizer'
+
     @abstractmethod
     def step(self, layer: Any, grads: Dict[str,np.ndarray]) -> np.ndarray:
         pass
@@ -29,7 +30,6 @@ class SGD(Optimizer):
         params={'weights': layer.weights,'biases': layer.biases} 
         for key in ['weights','biases']:
             params[key] -= self.learning_rate * grads[key]
-        return params['weights'], params['biases']
     def to_dict(self) -> dict:
         return {'learning_rate': self.learning_rate}
     @classmethod
@@ -59,7 +59,6 @@ class RMSProp(Optimizer):
         for key in ['weights', 'biases']:
             self.s[layer.name][key] = self.beta * self.s[layer.name][key] + (1 - self.beta) * (grads[key] ** 2)
             params[key] -= self.learning_rate * grads[key] / (np.sqrt(self.s[layer.name][key]) + self.epsilon)
-        return params['weights'], params['biases']
     
     def to_dict(self) -> dict:
         base_dict = super().to_dict()
@@ -92,12 +91,10 @@ class Adam(Optimizer):
         self.t = 0
     
     def initialize_state(self,layer: Any):
-        self.m[layer.name] = dict()
-        self.v[layer.name] = dict()
-        self.m[layer.name]['weights'] = np.zeros_like(layer.weights)
-        self.v[layer.name]['weights'] = np.zeros_like(layer.weights)
-        self.m[layer.name]['biases'] = np.zeros_like(layer.biases)
-        self.v[layer.name]['biases'] = np.zeros_like(layer.biases)
+        initial_dict = dict(weights = np.zeros_like(layer.weights),
+                            biases = np.zeros_like(layer.biases))
+        self.m[layer.name] = initial_dict.copy()
+        self.v[layer.name] = initial_dict.copy()
 
     def step(self,
              layer: Any,
@@ -113,7 +110,6 @@ class Adam(Optimizer):
             m_hat = self.m[layer.name][key] / (1 - self.beta1 ** self.t)
             v_hat = self.v[layer.name][key] / (1 - self.beta2 ** self.t)
             params[key] -= self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
-        return params['weights'], params['biases']
     
     def to_dict(self) -> dict:
         return {'beta1': self.beta1, 
