@@ -6,9 +6,10 @@ from PIL import Image
 from abc import abstractmethod
 
 class Dataset:
-    def __init__(self, X: np.ndarray, y: np.ndarray):
+    def __init__(self, X: np.ndarray, y: np.ndarray,split: Literal['train','test','validation']='train'):
         self.X = X
         self.y = y
+        self.split = split
 
     def __len__(self):
         return len(self.X)
@@ -28,8 +29,8 @@ class Dataset:
         split_idx = int(len(self.X) * train_ratio)
         X_train, y_train = self.X[:split_idx], self.y[:split_idx]
         X_val, y_val = self.X[split_idx:], self.y[split_idx:]
-        return Dataset(X_train, y_train), Dataset(X_val, y_val)
-    
+        return self.__class__(X_train, y_train, split='train'), self.__class__(X_val, y_val, split='validation')
+
     @abstractmethod
     def download(self):
         pass  # Placeholder for dataset download logic
