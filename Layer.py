@@ -84,23 +84,29 @@ class DenseLayer(Layer):
         logger.debug(f"Forward pass in layer {self.name}: input shape {input_data.shape}, z shape {self.last_z.shape}")
         return self.activation_function.function(self.last_z)
 
-    def backward(self, output_gradient: np.ndarray) -> Dict[str,np.ndarray]:
+    def backward(self, dL_da: np.ndarray) -> Dict[str,np.ndarray]:
         """
         Performs the backward pass through the layer, updating weights and biases.
         Parameters:
-            output_gradient (np.ndarray): Gradient of the loss with respect to the layer's output. Shape: (batch_size, output_size)
+            dL_da (np.ndarray): Gradient of the loss with respect to the layer's output. Shape: (batch_size, output_size)
             learning_rate (float): Learning rate for weight updates.
         Returns:
             np.ndarray: Gradient of the loss with respect to the layer's input. Shape: (batch_size, input_size)
             """
-        activation_gradient = self.activation_function.derivative(self.last_z)  # (batch_size, output_size)
-        delta = output_gradient * activation_gradient  # (batch_size, output_size)
+        batches = self.last_input.shape[0]
+        # The gradient of the activation function with respect to the scores (last_z)
+        da_dz = self.activation_function.derivative(self.last_z)  # (batch_size, output_size)
+        # The gradient of the loss with respect to the scores
+        dL_dz = dL_da * da_dz  # (batch_size, output_size)
+        
+        dz_dW = self.last_input  # (batch_size, input_size)
+        dz_db = 1  # Bias gradient is summed over batch
+        dz_di = self.weights  # (input_size, output_size)
+        weight_gradient = np.dot(dz_dW.T, dL_dz) / batches  # (input_size, output_size)
+        bias_gradient = np.sum(dL_dz*dz_db, axis=0) / batches # (output_size,)
 
-        weight_gradient = np.dot(self.last_input.T, delta) / self.last_input.shape[0]  # (input_size, output_size)
-        bias_gradient = np.sum(delta, axis=0) / self.last_input.shape[0] # (output_size,)
-
-        input_gradient = np.dot(delta, self.weights.T)  # (batch_size, input_size)
-        logger.debug(f"Backward pass in layer {self.name}: output_gradient shape {output_gradient.shape}, input_gradient shape {input_gradient.shape}") 
+        input_gradient = np.dot(dL_dz, dz_di.T)  # (batch_size, input_size)
+        logger.debug(f"Backward pass in layer {self.name}: output_gradient shape {dL_da.shape}, input_gradient shape {input_gradient.shape}") 
         grad_dict = {'inputs': input_gradient,
                      'weights': weight_gradient,
                      'biases': bias_gradient}
