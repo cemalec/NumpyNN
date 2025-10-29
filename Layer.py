@@ -1,3 +1,4 @@
+from typing import Tuple
 import numpy as np
 from DifferentiableFunction import DifferentiableFunction
 from typing import Dict
@@ -133,4 +134,97 @@ class DenseLayer(Layer):
                     output_size=data['output_size'],
                     activation_function=activation_function,
                     name=data['name'])
+        return layer
+    
+class CNNLayer(Layer):
+    def __init__(self,
+                 input_size: Tuple[int, int],
+                 output_size: Tuple[int, int],
+                 filter_size: int,
+                 num_filters: int,
+                 padding: int = 0,
+                 stride: int = 1,
+                 name: str = None):
+        super().__init__()
+        self.name = name
+        self.type = 'CNN'
+        self.input_size = input_size
+        self.output_size = output_size
+        self.filter_size = filter_size
+        self.num_filters = num_filters
+        self.padding = padding
+        self.stride = stride
+
+    def initialize_weights(self):
+        self.weights = np.random.randn(self.num_filters,
+                                       self.filter_size,
+                                       self.filter_size) * 0.01
+        self.biases = np.zeros(self.num_filters)
+        logger.info(f"Weights and biases initialized for CNN layer {self.name}")
+
+    def pad_input(self, input_data: np.ndarray) -> np.ndarray:
+        if self.padding > 0:
+            return np.pad(input_data, ((0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)), mode='constant')
+        return input_data
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        input_data = self.pad_input(input_data)
+        # Implement the forward pass
+        batch_size, _, height, width = input_data.shape
+        output_height = (height - self.filter_size) // self.stride + 1
+        output_width = (width - self.filter_size) // self.stride + 1
+        output = np.zeros((batch_size, self.num_filters, output_height, output_width))
+        for i in range(output_height):
+            for j in range(output_width):
+                h_start = i * self.stride
+                h_end = h_start + self.filter_size
+                w_start = j * self.stride
+                w_end = w_start + self.filter_size
+                input_slice = input_data[:, :, h_start:h_end, w_start:w_end]
+                output[:, :, i, j] = np.tensordot(input_slice, self.weights, axes=([1, 2, 3], [1, 2, 3])) + self.biases
+        return output
+
+    def backward(self, output_gradient: np.ndarray) -> Dict[str,np.ndarray]:
+        # Implement the backward pass
+        batch_size, _, output_height, output_width = output_gradient.shape
+        input_gradient = np.zeros((batch_size, self.num_filters, output_height, output_width))
+        weight_gradient = np.zeros_like(self.weights)
+        bias_gradient = np.zeros_like(self.biases)
+
+        for i in range(output_height):
+            for j in range(output_width):
+                h_start = i * self.stride
+                h_end = h_start + self.filter_size
+                w_start = j * self.stride
+                w_end = w_start + self.filter_size
+                input_slice = output_gradient[:, :, i, j]
+                weight_gradient += np.tensordot(input_slice, self.weights, axes=([1], [0]))
+                bias_gradient += np.sum(input_slice, axis=0)
+
+        return {
+            'inputs': input_gradient,
+            'weights': weight_gradient,
+            'biases': bias_gradient
+        }
+
+    def to_dict(self) -> Dict:
+        return {
+            'name': self.name,
+            'type': self.type,
+            'input_size': self.input_size,
+            'output_size': self.output_size,
+            'filter_size': self.filter_size,
+            'num_filters': self.num_filters,
+            'padding': self.padding,
+            'stride': self.stride
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'CNNLayer':
+        layer = cls(
+            filter_size=data['filter_size'],
+            num_filters=data['num_filters'],
+            padding=data['padding'],
+            stride=data['stride']
+        )
         return layer
