@@ -1,4 +1,6 @@
 import numpy as np
+
+
 def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """
     Calculate the accuracy of predictions.

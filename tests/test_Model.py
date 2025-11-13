@@ -4,24 +4,31 @@ from Model import Model
 from Layer import DenseLayer
 from DifferentiableFunction import DifferentiableFunction
 
+
 class DummyLoss(DifferentiableFunction):
     def __init__(self):
         def function(x):
-            return x ** 2
+            return x**2
+
         def derivative(x):
             return 2 * x
+
         super().__init__(function, derivative)
+
 
 class DummyLayer(DenseLayer):
     def __init__(self):
         self.last_input = None
         self.last_grad = None
+
     def forward(self, x):
         self.last_input = x
         return x + 1
+
     def backward(self, grad, lr):
         self.last_grad = grad
         return grad * 0.5
+
 
 class TestModel(unittest.TestCase):
     def setUp(self):
@@ -50,6 +57,7 @@ class TestModel(unittest.TestCase):
         self.model.backward(self.y_true, y_pred, learning_rate=0.1)
         for layer in self.layers:
             self.assertIsNotNone(layer.last_grad)
+
 
 if __name__ == "__main__":
     unittest.main()

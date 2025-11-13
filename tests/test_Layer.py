@@ -1,11 +1,14 @@
 import numpy as np
 from Layer import DenseLayer
 
+
 class DummyActivation:
     def function(self, x):
         return x
+
     def derivative(self, x):
         return np.ones_like(x)
+
 
 def test_backward_updates_weights_and_biases():
     input_size = 3
@@ -37,16 +40,15 @@ def test_backward_updates_weights_and_biases():
 
     # Check weights and biases update
     np.testing.assert_allclose(
-        layer.weights,
-        old_weights - learning_rate * expected_weights_gradient
+        layer.weights, old_weights - learning_rate * expected_weights_gradient
     )
     np.testing.assert_allclose(
-        layer.biases,
-        old_biases - learning_rate * expected_biases_gradient
+        layer.biases, old_biases - learning_rate * expected_biases_gradient
     )
 
     # Check input gradient
     np.testing.assert_allclose(input_grad, expected_input_gradient)
+
 
 def test_backward_with_multiple_samples():
     input_size = 2
@@ -73,11 +75,9 @@ def test_backward_with_multiple_samples():
     expected_input_gradient = delta @ old_weights.T
 
     np.testing.assert_allclose(
-        layer.weights,
-        old_weights - learning_rate * expected_weights_gradient
+        layer.weights, old_weights - learning_rate * expected_weights_gradient
     )
     np.testing.assert_allclose(
-        layer.biases,
-        old_biases - learning_rate * expected_biases_gradient
+        layer.biases, old_biases - learning_rate * expected_biases_gradient
     )
     np.testing.assert_allclose(input_grad, expected_input_gradient)
