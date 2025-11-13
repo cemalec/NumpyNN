@@ -55,10 +55,10 @@ class ParquetDataset(Dataset):
         
 class MNISTDataset(ParquetDataset):
     def __init__(self, 
+                 file_path: str = 'data/mnist/train-00000-of-00001.parquet',
                  split: Literal['train','test','validation'] = 'train',
                  feature_cols: List[str] = [ 'image' ],
                  label_col: str = 'label'):
-        file_path: str = f'/workspaces/NumpyNN/data/mnist/{split}-00000-of-00001.parquet'
         super().__init__(file_path, 
                          feature_cols,
                          label_col)

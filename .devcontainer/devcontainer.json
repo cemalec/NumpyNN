@@ -1,12 +1,15 @@
 {
     "name": "NumpyNN Python Dev Container",
     "image": "mcr.microsoft.com/devcontainers/python:3.11",
-    "containerEnv": {
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "/workspaces/NumpyNN"
+    "features": {
+        "ghcr.io/devcontainers/features/python:1": {
+            "version": "3.11"
+        }
     },
-    // Install Python requirements after numpy
-    "postCreateCommand": "pip install -r /workspaces/NumpyNN/.devcontainer/requirements.txt",
+    "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+    },
+    "postCreateCommand": "pip install numpy",
     "customizations": {
         "vscode": {
             "settings": {},
