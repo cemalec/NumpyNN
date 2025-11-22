@@ -34,6 +34,8 @@ def training_loop(
         batch_accuracies = []
         batch_losses = []
         for x_train, y_train in dataset.get_batches(batch_size):
+            logger.debug(f"Epoch {epoch+1}, Batch {i+1}")
+            logger.debug(f"x_train shape: {x_train.shape}, y_train shape: {y_train.shape}")
             # Forward pass
             y_pred = model.forward(x_train)
 
@@ -42,7 +44,7 @@ def training_loop(
             batch_losses.append(loss)
 
             # Backward pass (weights update as part of the optimizer step in Model.backward)
-            model.backward(y_train, y_pred, learning_rate)
+            model.backward(y_train, y_pred)
 
             # Compute accuracy
             batch_acc = accuracy(y_train, y_pred)

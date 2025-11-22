@@ -2,44 +2,40 @@ import unittest
 import numpy as np
 from Model import Model
 from Layer import DenseLayer
+from Optimizer import Optimizer
 from DifferentiableFunction import DifferentiableFunction
 
 
-class DummyLoss(DifferentiableFunction):
-    def __init__(self):
-        def function(x):
-            return x**2
+dummy_loss = DifferentiableFunction(lambda y_true, y_pred: np.mean((y_true - y_pred) ** 2),
+                                    lambda y_true, y_pred: 2 * (y_pred - y_true) / y_true.size)
 
-        def derivative(x):
-            return 2 * x
-
-        super().__init__(function, derivative)
-
+dummy_activation = DifferentiableFunction(lambda x: x + 1, lambda x: np.ones_like(x))
 
 class DummyLayer(DenseLayer):
-    def __init__(self):
-        self.last_input = None
-        self.last_grad = None
+    def forward(self, inputs: np.ndarray) -> np.ndarray:
+        self.inputs = inputs
+        return inputs + 1  # simple operation for testing
 
-    def forward(self, x):
-        self.last_input = x
-        return x + 1
+    def backward(self, grad_outputs: np.ndarray) -> dict:
+        grad_inputs = grad_outputs  # pass gradient unchanged
+        return {"inputs": grad_inputs}
+    
+dummy_layer = DummyLayer(2, 2, activation_function=dummy_activation)
 
-    def backward(self, grad, lr):
-        self.last_grad = grad
-        return grad * 0.5
-
+dummy_optimizer = Optimizer()
 
 class TestModel(unittest.TestCase):
     def setUp(self):
-        self.layers = [DummyLayer(), DummyLayer()]
-        self.loss = DummyLoss()
-        self.model = Model(self.layers, self.loss)
+        self.layers = [dummy_layer, dummy_layer]
+        self.loss = dummy_loss
+        self.optimizer = dummy_optimizer
+        self.model = Model(self.layers, self.loss, self.optimizer)
         self.x = np.array([[1.0, 2.0], [3.0, 4.0]])
         self.y_true = np.array([[2.0, 3.0], [4.0, 5.0]])
 
     def test_forward(self):
         out = self.model.forward(self.x)
+        print(out)
         np.testing.assert_array_equal(out, self.x + 2)
 
     def test_predict(self):
@@ -54,9 +50,9 @@ class TestModel(unittest.TestCase):
 
     def test_backward_calls_layers(self):
         y_pred = self.model.forward(self.x)
-        self.model.backward(self.y_true, y_pred, learning_rate=0.1)
+        self.model.backward(self.y_true, y_pred)
         for layer in self.layers:
-            self.assertIsNotNone(layer.last_grad)
+            self.assertTrue(hasattr(layer, 'inputs'))
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ class Model:
             x = layer.forward(x)
         return x
 
-    def backward(self, y_true: np.ndarray, y_pred: np.ndarray, learning_rate: float):
+    def backward(self, y_true: np.ndarray, y_pred: np.ndarray):
         loss_grad = self.loss.derivative(y_true, y_pred)
         grad_dict = {"inputs": loss_grad}
         for layer in reversed(self.layers):
