@@ -97,6 +97,9 @@ class Adam(Optimizer):
         beta1: float = 0.9,
         beta2: float = 0.999,
         epsilon: float = 1e-8,
+        m: Dict[str, Any] = None,
+        v: Dict[str, Any] = None,
+        t: int = 0,
     ):
         super().__init__()
         self.type = "Adam"
@@ -104,9 +107,15 @@ class Adam(Optimizer):
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
-        self.m = dict()
-        self.v = dict()
-        self.t = 0
+        if m is None:
+            self.m = dict()
+        else:
+            self.m = m
+        if v is None:
+            self.v = dict()
+        else:
+            self.v = v
+        self.t = t
 
     def initialize_state(self, layer: Any):
         initial_dict = dict(
@@ -133,6 +142,7 @@ class Adam(Optimizer):
 
     def to_dict(self) -> dict:
         return {
+            "learning_rate": self.learning_rate,
             "beta1": self.beta1,
             "beta2": self.beta2,
             "epsilon": self.epsilon,
@@ -144,12 +154,9 @@ class Adam(Optimizer):
     @classmethod
     def from_dict(cls, data: dict):
         obj = cls(
-            learning_rate=data["learning_rate"],
+            learning_rate=data.get("learning_rate", 0.001),
             beta1=data.get("beta1", 0.9),
             beta2=data.get("beta2", 0.999),
             epsilon=data.get("epsilon", 1e-8),
         )
-        obj.m = data.get("m", None)
-        obj.v = data.get("v", None)
-        obj.t = data.get("t", 0)
         return obj

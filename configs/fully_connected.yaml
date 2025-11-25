@@ -1,19 +1,19 @@
 layers: 
   - name: input
-    type: Dense
+    type: DenseLayer
     input_size: 784
     output_size: 64
-    activation_function: 'ReLU'
+    activation_function: ReLU
   - name: hidden
-    type: Dense
+    type: DenseLayer
     input_size: 64
     output_size: 32
-    activation_function: 'ReLU'
+    activation_function: ReLU
   - name: output
-    type: Dense
+    type: DenseLayer
     input_size: 32
     output_size: 10
-    activation_function: 'SoftMax'
+    activation_function: SoftMax
 loss: CrossEntropyLoss
 optimizer: 
   type: Adam

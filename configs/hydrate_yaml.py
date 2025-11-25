@@ -1,21 +1,43 @@
+import logging
 import yaml
 from Layer import DenseLayer
 from DifferentiableFunction import SoftMax, ReLU, CrossEntropyLoss
 from Model import Model
-from Optimizer import Adam
-from typing import Any, Dict
+from Optimizer import Adam, RMSProp,SGD
+from typing import Any, Dict, List
+from pydantic import BaseModel, Field
 
-basic_model = Model(
-    layers=[
-        DenseLayer(input_size=784, output_size=64, activation_function=ReLU()),
-        DenseLayer(input_size=32, output_size=10, activation_function=SoftMax()),
-    ],
-    loss=CrossEntropyLoss(),
-    optimizer=Adam(learning_rate=1e-3),
-)
-print(basic_model.to_dict())
+logger = logging.getLogger(__name__)
 
+class LayerConfig(BaseModel):
+    type: str
+    input_size: int
+    output_size: int
+    name: str = None
+    activation_function: str = None
 
-def hydrate_model(filepath: str) -> Dict[str, Any]:
+class OptimizerConfig(BaseModel):
+    type: str
+    learning_rate: float = None
+    beta1: float = None
+    beta2: float = None
+    epsilon: float = None
+
+class LossConfig(BaseModel):
+    type: str
+
+class ModelConfig(BaseModel):
+    layers: List[LayerConfig] = Field(...)
+    loss: str = None
+    optimizer: OptimizerConfig = None
+
+def hydrate_model(filepath: str) -> Model:
     with open(filepath, "r") as file:
         config = yaml.safe_load(file)
+    # Convert to dataclass
+    model_config = ModelConfig(
+        layers=[LayerConfig(**layer) for layer in config["layers"]],
+        loss=config["loss"],
+        optimizer=OptimizerConfig(**config["optimizer"]))
+    model = Model.from_dict(model_config.model_dump())
+    return model

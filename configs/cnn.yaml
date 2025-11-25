@@ -1,0 +1,47 @@
+layers: 
+  - name: input
+    type: CNNLayer
+    input_size: 
+      - 28
+      - 28
+    output_size: 
+      - 16
+    filter_size: 2
+    num_filters: 16
+    padding: 1
+    stride: 1
+    activation_function: 'ReLU'
+  - name: hiddenfeatures1
+    type: CNNLayer
+    input_size: 
+      - 16
+    output_size: 
+      - 8
+    filter_size: 2
+    num_filters: 32
+    padding: 1
+    stride: 1
+    activation_function: 'ReLU'
+  - name: hiddenfeatures2
+    type: CNNLayer
+    input_size: 
+      - 8
+    output_size: 
+      - 4
+    filter_size: 2
+    num_filters: 64
+    padding: 1
+    stride: 1
+    activation_function: 'ReLU'
+  - name: output
+    type: Dense
+    input_size: 512
+    output_size: 10
+    activation_function: 'SoftMax'
+loss: CrossEntropyLoss
+optimizer: 
+  type: Adam
+  learning_rate: 3e-6
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1e-8

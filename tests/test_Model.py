@@ -35,7 +35,6 @@ class TestModel(unittest.TestCase):
 
     def test_forward(self):
         out = self.model.forward(self.x)
-        print(out)
         np.testing.assert_array_equal(out, self.x + 2)
 
     def test_predict(self):

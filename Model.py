@@ -50,7 +50,7 @@ class Model:
 
     @classmethod
     def from_dict(cls, data: dict):
-        layers = [DenseLayer.from_dict(layer_data) for layer_data in data["layers"]]
+        layers = [getattr(__import__("Layer"), layer_data["type"]).from_dict(layer_data) for layer_data in data["layers"]]
         loss = getattr(__import__("DifferentiableFunction"), data["loss"])()
         optimizer = getattr(
             __import__("Optimizer"), data["optimizer"]["type"]
