@@ -58,49 +58,53 @@ class Model:
         return cls(layers=layers, loss=loss, optimizer=optimizer)
 
     def save(self, filepath: str):
-        np.savez(
-            filepath,
-            layers=[
-                dict(
-                    name=layer.name,
-                    input_size=layer.input_size,
-                    output_size=layer.output_size,
-                    weights=layer.weights,
-                    biases=layer.biases,
-                    activation_function=layer.activation_function.__class__.__name__,
-                    last_input=layer.last_input,
-                    last_z=layer.last_z,
-                )
-                for layer in self.layers
-            ],
-            loss=self.loss.__class__.__name__,
-            optimizer_name=self.optimizer.__class__.__name__,
-            optimizer=self.optimizer.to_dict(),
-            allows_pickle=True,
-        )
+        """Save model to npz file with proper serialization."""
+        model_dict = self.to_dict()
+        
+        save_dict = {'model_config': model_dict}
+        
+        # Save layer weights and biases
+        for i, layer in enumerate(self.layers):
+            if hasattr(layer, 'weights') and layer.weights is not None:
+                save_dict[f'layer_{i}_weights'] = layer.weights
+            if hasattr(layer, 'biases') and layer.biases is not None:
+                save_dict[f'layer_{i}_biases'] = layer.biases
+        
+        np.savez(filepath, **save_dict)
+        
+        # Save optimizer state separately if it has state
+        if hasattr(self.optimizer, 'save_state'):
+            opt_filepath = filepath.replace('.npz', '_optimizer.npz')
+            self.optimizer.save_state(opt_filepath)
 
     @classmethod
     def load(cls, filepath: str):
+        """Load model from npz file."""
         data = np.load(filepath, allow_pickle=True)
-        load_layers = data["layers"]
-        load_loss = data["loss"]
-        layers = []
-        for layer in load_layers:
-            init_layer = DenseLayer(
-                layer["input_size"],
-                layer["output_size"],
-                activation_function=getattr(
-                    __import__("DifferentiableFunction"), layer["activation_function"]
-                )(),
-                name=layer["name"],
-            )
-            init_layer.weights = layer["weights"]
-            init_layer.biases = layer["biases"]
-            init_layer.last_input = layer["last_input"]
-            init_layer.last_z = layer["last_z"]
-            layers.append(init_layer)
-        loss = getattr(__import__("DifferentiableFunction"), load_loss.item())()
-        optimizer = getattr(
-            __import__("Optimizer"), data["optimizer_name"].item()
-        ).from_dict(data["optimizer"].item())
-        return cls(layers=layers, loss=loss, optimizer=optimizer)
+        model_config = data['model_config'].item()
+        
+        model = cls.from_dict(model_config)
+        
+        # Restore weights and biases
+        for i, layer in enumerate(model.layers):
+            weight_key = f'layer_{i}_weights'
+            bias_key = f'layer_{i}_biases'
+            
+            if weight_key in data:
+                layer.weights = data[weight_key]
+                layer.weights_initialized = True
+            if bias_key in data:
+                layer.biases = data[bias_key]
+        
+        # Load optimizer state if available
+        opt_filepath = filepath.replace('.npz', '_optimizer.npz')
+        if hasattr(model.optimizer.__class__, 'load_state'):
+            try:
+                model.optimizer = model.optimizer.__class__.load_state(
+                    opt_filepath, 
+                    learning_rate=model.optimizer.learning_rate
+                )
+            except FileNotFoundError:
+                pass  # Continue with fresh optimizer state
+    
+        return model

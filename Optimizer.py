@@ -160,3 +160,30 @@ class Adam(Optimizer):
             epsilon=data.get("epsilon", 1e-8),
         )
         return obj
+
+    def save_state(self, filepath: str):
+        """Save optimizer state to npz file."""
+        np.savez(
+            filepath,
+            t=self.t,
+            m_keys=list(self.m.keys()),
+            v_keys=list(self.v.keys()),
+            **{f'm_{k}_weights': v['weights'] for k, v in self.m.items()},
+            **{f'm_{k}_biases': v['biases'] for k, v in self.m.items()},
+            **{f'v_{k}_weights': v['weights'] for k, v in self.v.items()},
+            **{f'v_{k}_biases': v['biases'] for k, v in self.v.items()},
+        )
+
+    @classmethod
+    def load_state(cls, filepath: str, learning_rate: float, **kwargs):
+        """Load optimizer state from npz file."""
+        data = np.load(filepath, allow_pickle=True)
+        m_keys = data['m_keys']
+        v_keys = data['v_keys']
+
+        m = {k: {'weights': data[f'm_{k}_weights'], 'biases': data[f'm_{k}_biases']}
+             for k in m_keys}
+        v = {k: {'weights': data[f'v_{k}_weights'], 'biases': data[f'v_{k}_biases']}
+             for k in v_keys}
+
+        return cls(learning_rate=learning_rate, t=int(data['t']), m=m, v=v, **kwargs)
