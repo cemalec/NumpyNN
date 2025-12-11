@@ -1,0 +1,7 @@
+{
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": "/workspaces/NumpyNN"
+    }
+}

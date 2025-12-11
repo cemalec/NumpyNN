@@ -16,6 +16,16 @@ class LayerConfig(BaseModel):
     name: str = None
     activation_function: str = None
 
+class CNNLayerConfig(BaseModel):
+    type: str
+    input_channels: int
+    output_channels: int
+    kernel_size: int
+    stride: int = 1
+    padding: int = 0
+    name: str = None
+    activation_function: str = None
+    
 class OptimizerConfig(BaseModel):
     type: str
     learning_rate: float = None
@@ -27,7 +37,7 @@ class LossConfig(BaseModel):
     type: str
 
 class ModelConfig(BaseModel):
-    layers: List[LayerConfig] = Field(...)
+    layers: List[LayerConfig | CNNLayerConfig] = Field(...)
     loss: str = None
     optimizer: OptimizerConfig = None
 
