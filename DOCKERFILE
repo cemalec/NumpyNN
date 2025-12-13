@@ -14,6 +14,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code
 COPY . .
-
 # Set the entrypoint to the training loop
 ENTRYPOINT ["python", "training_loop.py"]
