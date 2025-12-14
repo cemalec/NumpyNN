@@ -33,7 +33,9 @@ class Model:
         grad_dict = {"inputs": loss_grad}
         for layer in reversed(self.layers):
             grad_dict = layer.backward(grad_dict["inputs"])
-            self.optimizer.step(layer, grad_dict)
+            # Only call optimizer step if layer has learnable parameters
+            if grad_dict["weights"] is not None and grad_dict["biases"] is not None:
+                self.optimizer.step(layer, grad_dict)
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         return self.forward(x)

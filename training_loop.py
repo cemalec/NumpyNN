@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 # basic_model = Model.load('models/adam_model.npz')
 def training_loop(
-    model: Model, dataset: Dataset, epochs: int, batch_size: int, learning_rate: float
-):
+    model: Model, dataset: Dataset, epochs: int, batch_size: int):
     for epoch in range(epochs):
         i = 0
         batch_accuracies = []
@@ -108,7 +107,6 @@ if __name__ == "__main__":
         dataset=train_dataset,
         epochs=epochs,
         batch_size=batch_size,
-        learning_rate=learning_rate,
     )
 
     # Save Model

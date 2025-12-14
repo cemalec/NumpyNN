@@ -1,47 +1,47 @@
 layers: 
-  - name: input
+  - name: reshape
+    type: ReshapeLayer
+    output_shape: [1, 28, 28]
+  
+  - name: conv1
     type: CNNLayer
-    input_size: 
-      - 28
-      - 28
-    output_size: 
-      - 16
-    filter_size: 2
-    num_filters: 16
-    padding: 1
-    stride: 1
-    activation_function: 'ReLU'
-  - name: hiddenfeatures1
-    type: CNNLayer
-    input_size: 
-      - 16
-    output_size: 
-      - 8
-    filter_size: 2
+    input_size: [1, 28, 28]
+    output_size: [32, 26, 26]
+    kernel_size: 3
     num_filters: 32
-    padding: 1
+    padding: 0
     stride: 1
     activation_function: 'ReLU'
-  - name: hiddenfeatures2
+  
+  - name: conv2
     type: CNNLayer
-    input_size: 
-      - 8
-    output_size: 
-      - 4
-    filter_size: 2
+    input_size: [32, 26, 26]
+    output_size: [64, 24, 24]
+    kernel_size: 3
     num_filters: 64
-    padding: 1
+    padding: 0
     stride: 1
     activation_function: 'ReLU'
+  
+  - name: flatten
+    type: FlattenLayer
+  
+  - name: fc1
+    type: DenseLayer
+    input_size: 36864
+    output_size: 128
+    activation_function: 'ReLU'
+  
   - name: output
-    type: Dense
-    input_size: 512
+    type: DenseLayer
+    input_size: 128
     output_size: 10
     activation_function: 'SoftMax'
+
 loss: CrossEntropyLoss
 optimizer: 
   type: Adam
-  learning_rate: 3e-6
+  learning_rate: 0.001
   beta1: 0.9
   beta2: 0.999
   epsilon: 1e-8

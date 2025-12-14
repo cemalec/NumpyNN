@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple,List
 import numpy as np
 from DifferentiableFunction import DifferentiableFunction
 from typing import Dict
@@ -167,9 +167,9 @@ class DenseLayer(Layer):
 class CNNLayer(Layer):
     def __init__(
         self,
-        input_size: Tuple[int, int],
-        output_size: Tuple[int, int],
-        filter_size: int,
+        input_size: Tuple[int, int,int],
+        output_size: Tuple[int, int,int],
+        kernel_size: int | List[int],
         num_filters: int,
         padding: int = 0,
         stride: int = 1,
@@ -180,15 +180,15 @@ class CNNLayer(Layer):
         self.type = "CNN"
         self.input_size = input_size
         self.output_size = output_size
-        self.filter_size = filter_size
+        self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.padding = padding
         self.stride = stride
 
     def initialize_weights(self):
-        self.weights = (
-            np.random.randn(self.num_filters, self.filter_size, self.filter_size) * 0.01
-        )
+        # Need in_channels - extract from input_size or add as parameter
+        in_channels = self.input_size[0] if isinstance(self.input_size, (list, tuple)) else 1
+        self.weights = np.random.randn(self.num_filters, in_channels, self.kernel_size, self.kernel_size) * 0.01
         self.biases = np.zeros(self.num_filters)
         logger.info(f"Weights and biases initialized for CNN layer {self.name}")
 
@@ -207,46 +207,112 @@ class CNNLayer(Layer):
         return input_data
 
     def forward(self, input_data: np.ndarray) -> np.ndarray:
+        super().forward(input_data)
         input_data = self.pad_input(input_data)
-        # Implement the forward pass
-        batch_size, _, height, width = input_data.shape
-        output_height = (height - self.filter_size) // self.stride + 1
-        output_width = (width - self.filter_size) // self.stride + 1
-        output = np.zeros((batch_size, self.num_filters, output_height, output_width))
-        for i in range(output_height):
-            for j in range(output_width):
-                h_start = i * self.stride
-                h_end = h_start + self.filter_size
-                w_start = j * self.stride
-                w_end = w_start + self.filter_size
-                input_slice = input_data[:, :, h_start:h_end, w_start:w_end]
-                output[:, :, i, j] = (
-                    np.tensordot(input_slice, self.weights, axes=([1, 2, 3], [1, 2, 3]))
-                    + self.biases
-                )
+        
+        batch_size, in_channels, height, width = input_data.shape
+        output_height = (height - self.kernel_size) // self.stride + 1
+        output_width = (width - self.kernel_size) // self.stride + 1
+        
+        # Create strided view of input for all windows at once
+        # Shape: (batch, out_h, out_w, in_channels, filter_h, filter_w)
+        shape = (batch_size, output_height, output_width, in_channels, self.kernel_size, self.kernel_size)
+        strides = (
+            input_data.strides[0],  # batch stride
+            input_data.strides[2] * self.stride,  # output height stride
+            input_data.strides[3] * self.stride,  # output width stride
+            input_data.strides[1],  # channel stride
+            input_data.strides[2],  # filter height stride
+            input_data.strides[3],  # filter width stride
+        )
+        
+        windows = np.lib.stride_tricks.as_strided(input_data, shape=shape, strides=strides)
+        
+        # Convolve: (batch, out_h, out_w, in_ch, fh, fw) with (num_filters, in_ch, fh, fw)
+        # Result: (batch, out_h, out_w, num_filters)
+        output = np.einsum('bhwcij,fcij->bhwf', windows, self.weights.reshape(self.num_filters, in_channels, self.kernel_size, self.kernel_size))
+        
+        # Add biases and transpose to (batch, num_filters, out_h, out_w)
+        output = output + self.biases
+        output = np.transpose(output, (0, 3, 1, 2))
+        
+        self.last_input = input_data
         return output
 
     def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
-        # Implement the backward pass
-        batch_size, _, output_height, output_width = output_gradient.shape
-        input_gradient = np.zeros(
-            (batch_size, self.num_filters, output_height, output_width)
+        """
+        Vectorized backward pass for CNN layer.
+        
+        Parameters:
+            output_gradient: Shape (batch, num_filters, out_h, out_w)
+        
+        Returns:
+            Dictionary with 'inputs', 'weights', and 'biases' gradients
+        """
+        batch_size, num_filters, output_height, output_width = output_gradient.shape
+        _, in_channels, padded_height, padded_width = self.last_input.shape
+        
+        # Bias gradient: sum over batch, height, and width
+        bias_gradient = np.sum(output_gradient, axis=(0, 2, 3))
+        
+        # Prepare output gradient: (batch, num_filters, out_h, out_w) -> (batch, out_h, out_w, num_filters)
+        dL_dout = np.transpose(output_gradient, (0, 2, 3, 1))
+        
+        # Weight gradient using strided windows
+        # Create windows from last_input: (batch, out_h, out_w, in_ch, fh, fw)
+        shape = (batch_size, output_height, output_width, in_channels, self.kernel_size, self.kernel_size)
+        strides = (
+            self.last_input.strides[0],
+            self.last_input.strides[2] * self.stride,
+            self.last_input.strides[3] * self.stride,
+            self.last_input.strides[1],
+            self.last_input.strides[2],
+            self.last_input.strides[3],
         )
-        weight_gradient = np.zeros_like(self.weights)
-        bias_gradient = np.zeros_like(self.biases)
-
-        for i in range(output_height):
-            for j in range(output_width):
-                h_start = i * self.stride
-                h_end = h_start + self.filter_size
-                w_start = j * self.stride
-                w_end = w_start + self.filter_size
-                input_slice = output_gradient[:, :, i, j]
-                weight_gradient += np.tensordot(
-                    input_slice, self.weights, axes=([1], [0])
-                )
-                bias_gradient += np.sum(input_slice, axis=0)
-
+        windows = np.lib.stride_tricks.as_strided(self.last_input, shape=shape, strides=strides)
+        
+        # Weight gradient: (num_filters, in_ch, fh, fw)
+        # dL_dout: (batch, out_h, out_w, num_filters)
+        # windows: (batch, out_h, out_w, in_ch, fh, fw)
+        weight_gradient = np.einsum('bhwf,bhwcij->fcij', dL_dout, windows) / batch_size
+        
+        # Input gradient - need to do "full" convolution
+        # Rotate filters 180 degrees for convolution
+        rotated_weights = np.flip(self.weights, axis=(2, 3))
+        
+        # Pad output gradient for full convolution
+        pad_h = self.kernel_size - 1
+        pad_w = self.kernel_size - 1
+        dL_dout_padded = np.pad(
+            output_gradient,
+            ((0, 0), (0, 0), (pad_h, pad_h), (pad_w, pad_w)),
+            mode='constant'
+        )
+        
+        # Create strided view for backward pass
+        # Shape: (batch, in_ch, padded_h, padded_w, num_filters, fh, fw)
+        input_height = padded_height
+        input_width = padded_width
+        out_shape = (batch_size, input_height, input_width, num_filters, self.kernel_size, self.kernel_size)
+        out_strides = (
+            dL_dout_padded.strides[0],
+            dL_dout_padded.strides[2] * self.stride,
+            dL_dout_padded.strides[3] * self.stride,
+            dL_dout_padded.strides[1],
+            dL_dout_padded.strides[2],
+            dL_dout_padded.strides[3],
+        )
+        grad_windows = np.lib.stride_tricks.as_strided(dL_dout_padded, shape=out_shape, strides=out_strides)
+        
+        # Input gradient: (batch, in_ch, h, w)
+        # grad_windows: (batch, h, w, num_filters, fh, fw)
+        # rotated_weights: (num_filters, in_ch, fh, fw)
+        input_gradient = np.einsum('bhwfij,fcij->bchw', grad_windows, rotated_weights)
+        
+        # Remove padding from input gradient if padding was applied
+        if self.padding > 0:
+            input_gradient = input_gradient[:, :, self.padding:-self.padding, self.padding:-self.padding]
+        
         return {
             "inputs": input_gradient,
             "weights": weight_gradient,
@@ -259,7 +325,7 @@ class CNNLayer(Layer):
             "type": self.type,
             "input_size": self.input_size,
             "output_size": self.output_size,
-            "filter_size": self.filter_size,
+            "kernel_size": self.kernel_size,
             "num_filters": self.num_filters,
             "padding": self.padding,
             "stride": self.stride,
@@ -268,9 +334,156 @@ class CNNLayer(Layer):
     @classmethod
     def from_dict(cls, data: Dict) -> "CNNLayer":
         layer = cls(
-            filter_size=data["filter_size"],
+            input_size=data["input_size"],
+            output_size=data["output_size"],
+            kernel_size=data["kernel_size"],
             num_filters=data["num_filters"],
-            padding=data["padding"],
-            stride=data["stride"],
+            padding=data.get("padding", 0),
+            stride=data.get("stride", 1),
+            name=data.get("name"),
         )
         return layer
+
+
+class FlattenLayer(Layer):
+    """
+    Flattens multi-dimensional input to 2D (batch_size, flattened_features).
+    Useful for transitioning from CNN layers to Dense layers.
+    """
+
+    def __init__(self, name: str = None):
+        super().__init__()
+        self.name = name
+        self.type = "Flatten"
+        self.input_shape = None
+
+    def initialize_weights(self):
+        """Flatten layer has no weights to initialize."""
+        pass
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        """
+        Flatten input from (batch, channels, height, width) to (batch, channels*height*width).
+        
+        Parameters:
+            input_data: Shape (batch, ...) - any shape with batch as first dimension
+        
+        Returns:
+            Flattened array of shape (batch, features)
+        """
+        super().forward(input_data)
+        self.input_shape = input_data.shape
+        batch_size = input_data.shape[0]
+        
+        logger.debug(f"Flatten layer {self.name}: input shape {input_data.shape}")
+        
+        # Flatten all dimensions except batch
+        output = input_data.reshape(batch_size, -1)
+        
+        logger.debug(f"Flatten layer {self.name}: output shape {output.shape}")
+        return output
+
+    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+        """
+        Reshape gradient back to original input shape.
+        
+        Parameters:
+            output_gradient: Shape (batch, flattened_features)
+        
+        Returns:
+            Dictionary with 'inputs' reshaped to original input shape
+        """
+        # Reshape back to the input shape
+        input_gradient = output_gradient.reshape(self.input_shape)
+        
+        logger.debug(
+            f"Flatten layer {self.name} backward: output_gradient shape {output_gradient.shape}, "
+            f"input_gradient shape {input_gradient.shape}"
+        )
+        
+        return {
+            "inputs": input_gradient,
+            "weights": None,
+            "biases": None,
+        }
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "FlattenLayer":
+        return cls(name=data.get("name"))
+
+class ReshapeLayer(Layer):
+    """
+    Reshapes input to a specified shape.
+    Useful for converting between flattened and multi-dimensional formats.
+    """
+
+    def __init__(self, output_shape: Tuple[int, ...], name: str = None):
+        super().__init__()
+        self.name = name
+        self.type = "Reshape"
+        self.output_shape = output_shape
+        self.input_shape = None
+
+    def initialize_weights(self):
+        """Reshape layer has no weights to initialize."""
+        pass
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        """
+        Reshape input to specified shape, keeping batch dimension.
+        
+        Parameters:
+            input_data: Shape (batch, ...) - any shape with batch as first dimension
+        
+        Returns:
+            Reshaped array of shape (batch, *output_shape)
+        """
+        super().forward(input_data)
+        self.input_shape = input_data.shape
+        batch_size = input_data.shape[0]
+        
+        # Reshape to (batch_size, *output_shape)
+        output = input_data.reshape(batch_size, *self.output_shape)
+        
+        logger.debug(f"Reshape layer {self.name}: input shape {input_data.shape}, output shape {output.shape}")
+        return output
+
+    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+        """
+        Reshape gradient back to original input shape.
+        
+        Parameters:
+            output_gradient: Shape (batch, *output_shape)
+        
+        Returns:
+            Dictionary with 'inputs' reshaped to original input shape
+        """
+        input_gradient = output_gradient.reshape(self.input_shape)
+        
+        logger.debug(
+            f"Reshape layer {self.name} backward: output_gradient shape {output_gradient.shape}, "
+            f"input_gradient shape {input_gradient.shape}"
+        )
+        
+        return {
+            "inputs": input_gradient,
+            "weights": None,
+            "biases": None,
+        }
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "output_shape": self.output_shape,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "ReshapeLayer":
+        return cls(output_shape=tuple(data["output_shape"]), name=data.get("name"))
