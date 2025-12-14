@@ -13,28 +13,38 @@ layers:
     stride: 1
     activation_function: 'ReLU'
   
+  - name: pool1
+    type: MaxPoolLayer
+    pool_size: 2
+    stride: 2
+  
   - name: conv2
     type: CNNLayer
-    input_size: [32, 26, 26]
-    output_size: [64, 24, 24]
+    input_size: [32, 13, 13]
+    output_size: [16, 11, 11]
     kernel_size: 3
-    num_filters: 64
+    num_filters: 16
     padding: 0
     stride: 1
     activation_function: 'ReLU'
+  
+  - name: pool2
+    type: MaxPoolLayer
+    pool_size: 2
+    stride: 2
   
   - name: flatten
     type: FlattenLayer
   
   - name: fc1
     type: DenseLayer
-    input_size: 36864
-    output_size: 128
+    input_size: 400
+    output_size: 64
     activation_function: 'ReLU'
   
   - name: output
     type: DenseLayer
-    input_size: 128
+    input_size: 64
     output_size: 10
     activation_function: 'SoftMax'
 

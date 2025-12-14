@@ -33,6 +33,7 @@ def training_loop(
 
             # Compute accuracy
             batch_acc = accuracy(y_train, y_pred)
+            logger.info(f"Batch {i+1}, Loss: {loss:.4f}, Accuracy: {batch_acc:.4f}")
             batch_accuracies.append(batch_acc)
             i += 1
         avg_acc = np.mean(batch_accuracies)

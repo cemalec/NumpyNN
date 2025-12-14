@@ -77,7 +77,7 @@ def test_training_loop_decreases_parameter_error():
     # training_loop expects an accuracy function; provide a harmless stub
     tl.accuracy = lambda yt, yp: 0.0
 
-    training_loop(model=model, dataset=dataset, epochs=10, batch_size=32, learning_rate=0.05)
+    training_loop(model=model, dataset=dataset, epochs=10, batch_size=32)
 
     final_err = abs(model.w - 2.0) + abs(model.b - 1.0)
     assert final_err < init_err, "Model parameters did not move closer to target after training"
@@ -94,7 +94,7 @@ def test_training_loop_calls_backward_expected_number_of_times():
 
     epochs = 3
     batch_size = 10
-    training_loop(model=model, dataset=dataset, epochs=epochs, batch_size=batch_size, learning_rate=0.01)
+    training_loop(model=model, dataset=dataset, epochs=epochs, batch_size=batch_size)
 
     # expected number of batches per epoch
     expected_batches = int(np.ceil(len(X) / batch_size))

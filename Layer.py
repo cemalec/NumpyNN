@@ -487,3 +487,116 @@ class ReshapeLayer(Layer):
     @classmethod
     def from_dict(cls, data: Dict) -> "ReshapeLayer":
         return cls(output_shape=tuple(data["output_shape"]), name=data.get("name"))
+
+class MaxPoolLayer(Layer):
+    """
+    Max pooling layer that reduces spatial dimensions by taking maximum values.
+    """
+
+    def __init__(self, pool_size: int = 2, stride: int = 2, name: str = None):
+        super().__init__()
+        self.name = name
+        self.type = "MaxPool"
+        self.pool_size = pool_size
+        self.stride = stride
+        self.last_input = None
+        self.max_indices = None
+
+    def initialize_weights(self):
+        """MaxPool layer has no weights to initialize."""
+        pass
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        """
+        Max pooling forward pass.
+        
+        Parameters:
+            input_data: Shape (batch, channels, height, width)
+        
+        Returns:
+            Pooled output of shape (batch, channels, out_h, out_w)
+        """
+        super().forward(input_data)
+        self.last_input = input_data
+        
+        batch_size, channels, height, width = input_data.shape
+        out_h = (height - self.pool_size) // self.stride + 1
+        out_w = (width - self.pool_size) // self.stride + 1
+        
+        output = np.zeros((batch_size, channels, out_h, out_w))
+        
+        for i in range(out_h):
+            for j in range(out_w):
+                h_start = i * self.stride
+                h_end = h_start + self.pool_size
+                w_start = j * self.stride
+                w_end = w_start + self.pool_size
+                
+                pool_region = input_data[:, :, h_start:h_end, w_start:w_end]
+                output[:, :, i, j] = np.max(pool_region, axis=(2, 3))
+        
+        logger.debug(f"MaxPool layer {self.name}: input shape {input_data.shape}, output shape {output.shape}")
+        return output
+
+    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+        """
+        Max pooling backward pass.
+        
+        Parameters:
+            output_gradient: Shape (batch, channels, out_h, out_w)
+        
+        Returns:
+            Dictionary with 'inputs' gradient
+        """
+        batch_size, channels, height, width = self.last_input.shape
+        out_h, out_w = output_gradient.shape[2:4]
+        
+        input_gradient = np.zeros_like(self.last_input)
+        
+        for i in range(out_h):
+            for j in range(out_w):
+                h_start = i * self.stride
+                h_end = h_start + self.pool_size
+                w_start = j * self.stride
+                w_end = w_start + self.pool_size
+                
+                pool_region = self.last_input[:, :, h_start:h_end, w_start:w_end]
+                
+                # Reshape for comparison
+                region_flat = pool_region.reshape(batch_size, channels, -1)
+                max_indices = np.argmax(region_flat, axis=2)
+                
+                # Distribute gradient to max values
+                for b in range(batch_size):
+                    for c in range(channels):
+                        max_idx = max_indices[b, c]
+                        h_offset = max_idx // self.pool_size
+                        w_offset = max_idx % self.pool_size
+                        input_gradient[b, c, h_start + h_offset, w_start + w_offset] = output_gradient[b, c, i, j]
+        
+        logger.debug(
+            f"MaxPool layer {self.name} backward: output_gradient shape {output_gradient.shape}, "
+            f"input_gradient shape {input_gradient.shape}"
+        )
+        
+        return {
+            "inputs": input_gradient,
+            "weights": None,
+            "biases": None,
+        }
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "pool_size": self.pool_size,
+            "stride": self.stride,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "MaxPoolLayer":
+        return cls(
+            pool_size=data.get("pool_size", 2),
+            stride=data.get("stride", 2),
+            name=data.get("name")
+        )

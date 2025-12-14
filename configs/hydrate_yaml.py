@@ -44,13 +44,19 @@ class OptimizerConfig(BaseModel):
 class LossConfig(BaseModel):
     type: str
 
-LayerConfigType: TypeAlias = LayerConfig | CNNLayerConfig | FlattenLayerConfig | ReshapeLayerConfig
+class MaxPoolLayerConfig(BaseModel):
+    type: str = "MaxPoolLayer"
+    pool_size: int = 2
+    stride: int = 2
+    name: str = None
+
+LayerConfigType: TypeAlias = LayerConfig | CNNLayerConfig | FlattenLayerConfig | ReshapeLayerConfig | MaxPoolLayerConfig
 class ModelConfig(BaseModel):
     layers: List[LayerConfigType] = Field(...)
     loss: str = None
     optimizer: OptimizerConfig = None
 
-def get_layer_model(layer_type: str) -> LayerConfigType:
+def get_layer_model(layer_type: str):
     logger.debug(f"Getting layer model for type: {layer_type}")
     if layer_type == "DenseLayer":
         return LayerConfig
@@ -60,6 +66,8 @@ def get_layer_model(layer_type: str) -> LayerConfigType:
         return FlattenLayerConfig
     elif layer_type == "ReshapeLayer":
         return ReshapeLayerConfig
+    elif layer_type == "MaxPoolLayer":
+        return MaxPoolLayerConfig
     else:
         raise ValueError(f"Unsupported layer type: {layer_type}")
     
