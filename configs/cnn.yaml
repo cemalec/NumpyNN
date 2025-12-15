@@ -6,12 +6,16 @@ layers:
   - name: conv1
     type: CNNLayer
     input_size: [1, 28, 28]
-    output_size: [32, 26, 26]
+    output_size: [16, 26, 26]
     kernel_size: 3
-    num_filters: 32
+    num_filters: 16
     padding: 0
     stride: 1
     activation_function: 'ReLU'
+  
+  - name: bn1
+    type: BatchNormLayer
+    num_features: 16
   
   - name: pool1
     type: MaxPoolLayer
@@ -20,13 +24,17 @@ layers:
   
   - name: conv2
     type: CNNLayer
-    input_size: [32, 13, 13]
-    output_size: [16, 11, 11]
+    input_size: [16, 13, 13]
+    output_size: [32, 11, 11]
     kernel_size: 3
-    num_filters: 16
+    num_filters: 32
     padding: 0
     stride: 1
     activation_function: 'ReLU'
+  
+  - name: bn2
+    type: BatchNormLayer
+    num_features: 32
   
   - name: pool2
     type: MaxPoolLayer
@@ -36,15 +44,9 @@ layers:
   - name: flatten
     type: FlattenLayer
   
-  - name: fc1
-    type: DenseLayer
-    input_size: 400
-    output_size: 64
-    activation_function: 'ReLU'
-  
   - name: output
     type: DenseLayer
-    input_size: 64
+    input_size: 800
     output_size: 10
     activation_function: 'SoftMax'
 

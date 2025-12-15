@@ -33,8 +33,15 @@ class Model:
         grad_dict = {"inputs": loss_grad}
         for layer in reversed(self.layers):
             grad_dict = layer.backward(grad_dict["inputs"])
-            # Only call optimizer step if layer has learnable parameters
-            if grad_dict["weights"] is not None and grad_dict["biases"] is not None:
+            
+            # Check if any gradient exists for layer parameters (excluding 'inputs')
+            has_learnable_params = any(
+                grad_dict.get(param) is not None 
+                for param in grad_dict.keys() 
+                if param != "inputs"
+            )
+            
+            if has_learnable_params:
                 self.optimizer.step(layer, grad_dict)
 
     def predict(self, x: np.ndarray) -> np.ndarray:
@@ -62,19 +69,18 @@ class Model:
     def save(self, filepath: str):
         """Save model to npz file with proper serialization."""
         model_dict = self.to_dict()
-        
         save_dict = {'model_config': model_dict}
         
-        # Save layer weights and biases
+        # Save all learnable parameters for each layer
         for i, layer in enumerate(self.layers):
-            if hasattr(layer, 'weights') and layer.weights is not None:
-                save_dict[f'layer_{i}_weights'] = layer.weights
-            if hasattr(layer, 'biases') and layer.biases is not None:
-                save_dict[f'layer_{i}_biases'] = layer.biases
-        
+            for param_name in ['weights', 'biases', 'gamma', 'beta']:
+                if hasattr(layer, param_name):
+                    param = getattr(layer, param_name)
+                    if param is not None:
+                        save_dict[f'layer_{i}_{param_name}'] = param
+    
         np.savez(filepath, **save_dict)
         
-        # Save optimizer state separately if it has state
         if hasattr(self.optimizer, 'save_state'):
             opt_filepath = filepath.replace('.npz', '_optimizer.npz')
             self.optimizer.save_state(opt_filepath)
@@ -87,17 +93,15 @@ class Model:
         
         model = cls.from_dict(model_config)
         
-        # Restore weights and biases
+        # Restore all learnable parameters
         for i, layer in enumerate(model.layers):
-            weight_key = f'layer_{i}_weights'
-            bias_key = f'layer_{i}_biases'
-            
-            if weight_key in data:
-                layer.weights = data[weight_key]
-                layer.weights_initialized = True
-            if bias_key in data:
-                layer.biases = data[bias_key]
-        
+            for param_name in ['weights', 'biases', 'gamma', 'beta']:
+                key = f'layer_{i}_{param_name}'
+                if key in data and hasattr(layer, param_name):
+                    setattr(layer, param_name, data[key])
+                    if param_name in ['weights', 'biases']:
+                        layer.weights_initialized = True
+    
         # Load optimizer state if available
         opt_filepath = filepath.replace('.npz', '_optimizer.npz')
         if hasattr(model.optimizer.__class__, 'load_state'):
@@ -107,6 +111,6 @@ class Model:
                     learning_rate=model.optimizer.learning_rate
                 )
             except FileNotFoundError:
-                pass  # Continue with fresh optimizer state
+                pass
     
         return model

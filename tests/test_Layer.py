@@ -1,5 +1,5 @@
 import numpy as np
-from Layer import DenseLayer, Layer, CNNLayer, FlattenLayer, ReshapeLayer
+from Layer import DenseLayer, Layer, CNNLayer, FlattenLayer, ReshapeLayer, BatchNormLayer
 from DifferentiableFunction import ReLU
 
 
@@ -256,3 +256,177 @@ def test_reshape_to_dict_and_from_dict():
     assert restored_layer.name == layer.name
     assert restored_layer.type == layer.type
     assert restored_layer.output_shape == layer.output_shape
+
+
+def test_batchnorm_layer_forward():
+    """Test BatchNorm layer forward pass."""
+    batch_size = 4
+    num_features = 3
+    input_data = np.random.randn(batch_size, num_features).astype(float)
+    
+    layer = BatchNormLayer(num_features=num_features, name="test_bn")
+    output = layer.forward(input_data)
+    
+    # Output shape should match input shape
+    assert output.shape == input_data.shape, f"Expected shape {input_data.shape}, got {output.shape}"
+    assert layer.gamma is not None
+    assert layer.beta is not None
+    assert layer.running_mean is not None
+    assert layer.running_var is not None
+
+
+def test_batchnorm_layer_forward_4d():
+    """Test BatchNorm layer forward pass with 4D input (batch, channels, height, width)."""
+    batch_size = 2
+    channels = 16
+    height = 8
+    width = 8
+    input_data = np.random.randn(batch_size, channels, height, width).astype(float)
+    
+    layer = BatchNormLayer(num_features=channels, name="test_bn_4d")
+    output = layer.forward(input_data)
+    
+    # Output shape should match input shape
+    assert output.shape == input_data.shape, f"Expected shape {input_data.shape}, got {output.shape}"
+
+
+def test_batchnorm_layer_backward():
+    """Test BatchNorm layer backward pass."""
+    batch_size = 4
+    num_features = 3
+    input_data = np.random.randn(batch_size, num_features).astype(float)
+    
+    layer = BatchNormLayer(num_features=num_features, name="test_bn")
+    output = layer.forward(input_data)
+    
+    # Create output gradient
+    output_gradient = np.random.randn(*output.shape).astype(float)
+    
+    # Backward pass
+    grad_dict = layer.backward(output_gradient)
+    
+    # Check gradient shapes
+    assert grad_dict["inputs"].shape == input_data.shape, \
+        f"Input gradient shape {grad_dict['inputs'].shape} != input shape {input_data.shape}"
+    assert grad_dict["gamma"].shape == (num_features,), \
+        f"Gamma gradient shape {grad_dict['gamma'].shape} != expected (num_features,)"
+    assert grad_dict["beta"].shape == (num_features,), \
+        f"Beta gradient shape {grad_dict['beta'].shape} != expected (num_features,)"
+
+
+def test_batchnorm_layer_backward_4d():
+    """Test BatchNorm layer backward pass with 4D input."""
+    batch_size = 2
+    channels = 16
+    height = 8
+    width = 8
+    input_data = np.random.randn(batch_size, channels, height, width).astype(float)
+    
+    layer = BatchNormLayer(num_features=channels, name="test_bn_4d")
+    output = layer.forward(input_data)
+    
+    # Create output gradient
+    output_gradient = np.random.randn(*output.shape).astype(float)
+    
+    # Backward pass
+    grad_dict = layer.backward(output_gradient)
+    
+    # Check gradient shapes
+    assert grad_dict["inputs"].shape == input_data.shape, \
+        f"Input gradient shape {grad_dict['inputs'].shape} != input shape {input_data.shape}"
+    assert grad_dict["gamma"].shape == (channels,), \
+        f"Gamma gradient shape {grad_dict['gamma'].shape} != expected ({channels},)"
+    assert grad_dict["beta"].shape == (channels,), \
+        f"Beta gradient shape {grad_dict['beta'].shape} != expected ({channels},)"
+
+
+def test_batchnorm_normalizes_output():
+    """Test that BatchNorm actually normalizes the output."""
+    batch_size = 32
+    num_features = 10
+    # Create input with non-zero mean and non-unit variance
+    input_data = np.random.randn(batch_size, num_features) * 5 + 3
+    
+    layer = BatchNormLayer(num_features=num_features, momentum=0.0, name="test_bn_norm")
+    output = layer.forward(input_data)
+    
+    # Check that output is normalized (approximately zero mean, unit variance)
+    output_mean = np.mean(output, axis=0)
+    output_var = np.var(output, axis=0)
+    
+    np.testing.assert_allclose(output_mean, 0, atol=1e-5)
+    np.testing.assert_allclose(output_var, 1, atol=1e-5)
+
+
+def test_batchnorm_scale_and_shift():
+    """Test that BatchNorm applies scale and shift correctly."""
+    batch_size = 16
+    num_features = 5
+    input_data = np.random.randn(batch_size, num_features)
+    
+    layer = BatchNormLayer(num_features=num_features, momentum=0.0, name="test_bn_scale")
+    
+    # Set specific gamma and beta
+    layer.gamma = np.array([2.0, 3.0, 4.0, 5.0, 6.0])
+    layer.beta = np.array([1.0, 0.5, -0.5, 2.0, -1.0])
+    
+    output = layer.forward(input_data)
+    
+    # The output should be scaled and shifted version of normalized input
+    # output = gamma * normalized_input + beta
+    expected_output = (layer.gamma * layer.x_normalized + layer.beta)
+    np.testing.assert_allclose(output, expected_output, rtol=1e-6)
+
+
+def test_batchnorm_running_statistics():
+    """Test that BatchNorm updates running statistics."""
+    batch_size = 16
+    num_features = 4
+    momentum = 0.9
+    
+    layer = BatchNormLayer(num_features=num_features, momentum=momentum, name="test_bn_running")
+    
+    # First batch
+    input_data_1 = np.random.randn(batch_size, num_features) + 1.0
+    output_1 = layer.forward(input_data_1)
+    
+    batch_mean_1 = np.mean(input_data_1, axis=0)
+    batch_var_1 = np.var(input_data_1, axis=0)
+    
+    expected_running_mean_1 = momentum * 0 + (1 - momentum) * batch_mean_1
+    expected_running_var_1 = momentum * 1 + (1 - momentum) * batch_var_1
+    
+    np.testing.assert_allclose(layer.running_mean, expected_running_mean_1, rtol=1e-6)
+    np.testing.assert_allclose(layer.running_var, expected_running_var_1, rtol=1e-6)
+    
+    # Second batch
+    input_data_2 = np.random.randn(batch_size, num_features) - 1.0
+    output_2 = layer.forward(input_data_2)
+    
+    batch_mean_2 = np.mean(input_data_2, axis=0)
+    batch_var_2 = np.var(input_data_2, axis=0)
+    
+    expected_running_mean_2 = momentum * expected_running_mean_1 + (1 - momentum) * batch_mean_2
+    expected_running_var_2 = momentum * expected_running_var_1 + (1 - momentum) * batch_var_2
+    
+    np.testing.assert_allclose(layer.running_mean, expected_running_mean_2, rtol=1e-6)
+    np.testing.assert_allclose(layer.running_var, expected_running_var_2, rtol=1e-6)
+
+
+def test_batchnorm_to_dict_and_from_dict():
+    """Test BatchNorm layer serialization."""
+    layer = BatchNormLayer(
+        num_features=32,
+        momentum=0.9,
+        epsilon=1e-5,
+        name="bn1"
+    )
+    
+    layer_dict = layer.to_dict()
+    restored_layer = BatchNormLayer.from_dict(layer_dict)
+    
+    assert restored_layer.name == layer.name
+    assert restored_layer.type == layer.type
+    assert restored_layer.num_features == layer.num_features
+    assert restored_layer.momentum == layer.momentum
+    assert restored_layer.epsilon == layer.epsilon

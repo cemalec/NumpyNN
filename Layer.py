@@ -508,7 +508,7 @@ class MaxPoolLayer(Layer):
 
     def forward(self, input_data: np.ndarray) -> np.ndarray:
         """
-        Max pooling forward pass.
+        Max pooling forward pass using strided views.
         
         Parameters:
             input_data: Shape (batch, channels, height, width)
@@ -523,24 +523,30 @@ class MaxPoolLayer(Layer):
         out_h = (height - self.pool_size) // self.stride + 1
         out_w = (width - self.pool_size) // self.stride + 1
         
-        output = np.zeros((batch_size, channels, out_h, out_w))
+        # Create strided view of input windows
+        # Shape: (batch, out_h, out_w, channels, pool_h, pool_w)
+        shape = (batch_size, out_h, out_w, channels, self.pool_size, self.pool_size)
+        strides = (
+            input_data.strides[0],
+            input_data.strides[2] * self.stride,
+            input_data.strides[3] * self.stride,
+            input_data.strides[1],
+            input_data.strides[2],
+            input_data.strides[3],
+        )
         
-        for i in range(out_h):
-            for j in range(out_w):
-                h_start = i * self.stride
-                h_end = h_start + self.pool_size
-                w_start = j * self.stride
-                w_end = w_start + self.pool_size
-                
-                pool_region = input_data[:, :, h_start:h_end, w_start:w_end]
-                output[:, :, i, j] = np.max(pool_region, axis=(2, 3))
+        windows = np.lib.stride_tricks.as_strided(input_data, shape=shape, strides=strides)
+        
+        # Max pool: take max over pool dimensions (last 2 axes)
+        output = np.max(windows, axis=(4, 5))  # (batch, out_h, out_w, channels)
+        output = np.transpose(output, (0, 3, 1, 2))  # (batch, channels, out_h, out_w)
         
         logger.debug(f"MaxPool layer {self.name}: input shape {input_data.shape}, output shape {output.shape}")
         return output
 
     def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
         """
-        Max pooling backward pass.
+        Max pooling backward pass using strided views.
         
         Parameters:
             output_gradient: Shape (batch, channels, out_h, out_w)
@@ -549,8 +555,42 @@ class MaxPoolLayer(Layer):
             Dictionary with 'inputs' gradient
         """
         batch_size, channels, height, width = self.last_input.shape
-        out_h, out_w = output_gradient.shape[2:4]
+        _, _, out_h, out_w = output_gradient.shape
         
+        # Create strided view of input windows
+        shape = (batch_size, out_h, out_w, channels, self.pool_size, self.pool_size)
+        strides = (
+            self.last_input.strides[0],
+            self.last_input.strides[2] * self.stride,
+            self.last_input.strides[3] * self.stride,
+            self.last_input.strides[1],
+            self.last_input.strides[2],
+            self.last_input.strides[3],
+        )
+        
+        windows = np.lib.stride_tricks.as_strided(self.last_input, shape=shape, strides=strides)
+        
+        # Reshape windows for max comparison
+        windows_reshaped = windows.reshape(batch_size, out_h, out_w, channels, -1)
+        
+        # Find max indices
+        max_indices = np.argmax(windows_reshaped, axis=4)  # (batch, out_h, out_w, channels)
+        
+        # Create mask where max values are
+        max_mask = np.zeros_like(windows_reshaped)
+        np.put_along_axis(max_mask, max_indices[..., np.newaxis], 1, axis=4)
+        
+        # Reshape mask back to pool window shape
+        max_mask = max_mask.reshape(batch_size, out_h, out_w, channels, self.pool_size, self.pool_size)
+        
+        # Transpose output gradient to match window shape
+        grad_transposed = np.transpose(output_gradient, (0, 2, 3, 1))  # (batch, out_h, out_w, channels)
+        grad_expanded = grad_transposed[..., np.newaxis, np.newaxis]  # (batch, out_h, out_w, channels, 1, 1)
+        
+        # Apply mask and redistribute gradients
+        grad_windows = grad_expanded * max_mask
+        
+        # Accumulate gradients back to input
         input_gradient = np.zeros_like(self.last_input)
         
         for i in range(out_h):
@@ -560,19 +600,7 @@ class MaxPoolLayer(Layer):
                 w_start = j * self.stride
                 w_end = w_start + self.pool_size
                 
-                pool_region = self.last_input[:, :, h_start:h_end, w_start:w_end]
-                
-                # Reshape for comparison
-                region_flat = pool_region.reshape(batch_size, channels, -1)
-                max_indices = np.argmax(region_flat, axis=2)
-                
-                # Distribute gradient to max values
-                for b in range(batch_size):
-                    for c in range(channels):
-                        max_idx = max_indices[b, c]
-                        h_offset = max_idx // self.pool_size
-                        w_offset = max_idx % self.pool_size
-                        input_gradient[b, c, h_start + h_offset, w_start + w_offset] = output_gradient[b, c, i, j]
+                input_gradient[:, :, h_start:h_end, w_start:w_end] += grad_windows[:, i, j, :, :, :]
         
         logger.debug(
             f"MaxPool layer {self.name} backward: output_gradient shape {output_gradient.shape}, "
@@ -598,5 +626,154 @@ class MaxPoolLayer(Layer):
         return cls(
             pool_size=data.get("pool_size", 2),
             stride=data.get("stride", 2),
+            name=data.get("name")
+        )
+
+class BatchNormLayer(Layer):
+    """
+    Batch Normalization layer that normalizes inputs and applies learned scale/shift.
+    """
+
+    def __init__(self, num_features: int, momentum: float = 0.9, epsilon: float = 1e-5, name: str = None):
+        super().__init__()
+        self.name = name
+        self.type = "BatchNormLayer"
+        self.num_features = num_features
+        self.momentum = momentum
+        self.epsilon = epsilon
+        
+        # Learnable parameters
+        self.gamma = None  # scale
+        self.beta = None   # shift
+        
+        # Running statistics for inference
+        self.running_mean = None
+        self.running_var = None
+        
+        # Cached values for backward pass
+        self.x_normalized = None
+        self.batch_mean = None
+        self.batch_var = None
+
+    def initialize_weights(self):
+        """Initialize gamma=1, beta=0, and running statistics."""
+        self.gamma = np.ones(self.num_features)
+        self.beta = np.zeros(self.num_features)
+        self.running_mean = np.zeros(self.num_features)
+        self.running_var = np.ones(self.num_features)
+        logger.info(f"Batch norm parameters initialized for layer {self.name}")
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        """
+        Batch normalization forward pass.
+        
+        Parameters:
+            input_data: Shape (batch, features) or (batch, channels, height, width)
+        
+        Returns:
+            Normalized output of same shape as input
+        """
+        super().forward(input_data)
+        self.last_input = input_data
+        
+        # Reshape to (batch, features) for computation
+        original_shape = input_data.shape
+        if len(input_data.shape) == 4:  # (batch, channels, height, width)
+            batch_data = input_data.reshape(input_data.shape[0], input_data.shape[1], -1)
+            batch_data = batch_data.transpose(0, 2, 1).reshape(-1, input_data.shape[1])
+        else:
+            batch_data = input_data
+        
+        # Compute batch statistics
+        self.batch_mean = np.mean(batch_data, axis=0)
+        self.batch_var = np.var(batch_data, axis=0)
+        
+        # Normalize
+        self.x_normalized = (batch_data - self.batch_mean) / np.sqrt(self.batch_var + self.epsilon)
+        
+        # Scale and shift
+        output = self.gamma * self.x_normalized + self.beta
+        
+        # Update running statistics
+        self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * self.batch_mean
+        self.running_var = self.momentum * self.running_var + (1 - self.momentum) * self.batch_var
+        
+        # Reshape back to original shape
+        if len(original_shape) == 4:
+            output = output.reshape(-1, original_shape[1], original_shape[2], original_shape[3])
+        else:
+            output = output.reshape(original_shape)
+        
+        logger.debug(f"BatchNorm layer {self.name}: input shape {input_data.shape}, output shape {output.shape}")
+        return output
+
+    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+        """
+        Batch normalization backward pass.
+        
+        Parameters:
+            output_gradient: Shape same as forward output
+        
+        Returns:
+            Dictionary with gradients for inputs, gamma, and beta
+        """
+        original_shape = output_gradient.shape
+        
+        # Reshape to (batch, features) for computation
+        if len(output_gradient.shape) == 4:
+            batch_grad = output_gradient.reshape(output_gradient.shape[0], output_gradient.shape[1], -1)
+            batch_grad = batch_grad.transpose(0, 2, 1).reshape(-1, output_gradient.shape[1])
+        else:
+            batch_grad = output_gradient
+        
+        batch_size = batch_grad.shape[0]
+        
+        # Gradient w.r.t. gamma and beta
+        gamma_gradient = np.sum(batch_grad * self.x_normalized, axis=0) / batch_size
+        beta_gradient = np.sum(batch_grad, axis=0) / batch_size
+        
+        # Gradient w.r.t. normalized input
+        x_norm_grad = batch_grad * self.gamma
+        
+        # Gradient w.r.t. variance and mean
+        var_grad = np.sum(x_norm_grad * (self.last_input.reshape(-1, self.num_features) - self.batch_mean) * -0.5 * 
+                         (self.batch_var + self.epsilon) ** -1.5, axis=0) / batch_size
+        mean_grad = np.sum(x_norm_grad * -1 / np.sqrt(self.batch_var + self.epsilon), axis=0) / batch_size
+        mean_grad += var_grad * np.sum(-2 * (self.last_input.reshape(-1, self.num_features) - self.batch_mean), axis=0) / batch_size
+        
+        # Gradient w.r.t. input
+        input_gradient = (x_norm_grad / np.sqrt(self.batch_var + self.epsilon) +
+                         var_grad * 2 * (self.last_input.reshape(-1, self.num_features) - self.batch_mean) / batch_size +
+                         mean_grad / batch_size)
+        
+        # Reshape back
+        input_gradient = input_gradient.reshape(original_shape)
+        
+        logger.debug(
+            f"BatchNorm layer {self.name} backward: output_gradient shape {output_gradient.shape}, "
+            f"input_gradient shape {input_gradient.shape}"
+        )
+        
+        return {
+            "inputs": input_gradient,
+            "gamma": gamma_gradient,
+            "beta": beta_gradient,
+        }
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "num_features": self.num_features,
+            "momentum": self.momentum,
+            "epsilon": self.epsilon,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "BatchNormLayer":
+        return cls(
+            num_features=data["num_features"],
+            momentum=data.get("momentum", 0.9),
+            epsilon=data.get("epsilon", 1e-5),
             name=data.get("name")
         )

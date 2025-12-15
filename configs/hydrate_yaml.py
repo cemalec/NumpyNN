@@ -1,6 +1,6 @@
 import logging
 import yaml
-from typing import List,Tuple,TypeAlias,Optional
+from typing import List,Tuple,TypeAlias,Optional,Literal
 from Layer import DenseLayer
 from DifferentiableFunction import SoftMax, ReLU, CrossEntropyLoss
 from Model import Model
@@ -50,7 +50,14 @@ class MaxPoolLayerConfig(BaseModel):
     stride: int = 2
     name: str = None
 
-LayerConfigType: TypeAlias = LayerConfig | CNNLayerConfig | FlattenLayerConfig | ReshapeLayerConfig | MaxPoolLayerConfig
+class BatchNormLayerConfig(BaseModel):
+    type: str = "BatchNormLayer"
+    num_features: int
+    momentum: float = 0.9
+    epsilon: float = 1e-5
+    name: str = None
+
+LayerConfigType: TypeAlias = LayerConfig|CNNLayerConfig|FlattenLayerConfig|ReshapeLayerConfig|MaxPoolLayerConfig|BatchNormLayerConfig
 class ModelConfig(BaseModel):
     layers: List[LayerConfigType] = Field(...)
     loss: str = None
@@ -68,6 +75,8 @@ def get_layer_model(layer_type: str):
         return ReshapeLayerConfig
     elif layer_type == "MaxPoolLayer":
         return MaxPoolLayerConfig
+    elif layer_type == "BatchNormLayer":
+        return BatchNormLayerConfig
     else:
         raise ValueError(f"Unsupported layer type: {layer_type}")
     

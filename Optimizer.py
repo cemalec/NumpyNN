@@ -28,13 +28,20 @@ class SGD(Optimizer):
         self.learning_rate = learning_rate
         self.type = "SGD"
 
-    def step(self, layer, grads: np.ndarray) -> np.ndarray:
-        params = {"weights": layer.weights, "biases": layer.biases}
-        for key in ["weights", "biases"]:
-            params[key] -= self.learning_rate * grads[key]
+    def step(self, layer, grads: Dict[str, np.ndarray]) -> np.ndarray:
+        for param_name, grad in grads.items():
+            if grad is None or param_name == "inputs":
+                continue
+            
+            if not hasattr(layer, param_name):
+                continue
+            
+            param_val = getattr(layer, param_name)
+            if param_val is not None:
+                setattr(layer, param_name, param_val - self.learning_rate * grad)
 
     def to_dict(self) -> dict:
-        return {"learning_rate": self.learning_rate}
+        return {"learning_rate": self.learning_rate, "type": self.type}
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -51,35 +58,47 @@ class RMSProp(Optimizer):
         self.s = dict()
 
     def initialize_state(self, layer: Any):
-        self.s[layer.name] = dict()
-        self.s[layer.name]["weights"] = np.zeros_like(layer.weights)
-        self.s[layer.name]["biases"] = np.zeros_like(layer.biases)
+        self.s[layer.name] = {}
+        for attr_name in ['weights', 'biases', 'gamma', 'beta']:
+            if hasattr(layer, attr_name):
+                param = getattr(layer, attr_name)
+                if param is not None:
+                    self.s[layer.name][attr_name] = np.zeros_like(param)
 
     def step(self, layer: Any, grads: Dict[str, np.ndarray]) -> np.ndarray:
         if self.s.get(layer.name) is None:
             self.initialize_state(layer)
-        params = {"weights": layer.weights, "biases": layer.biases}
-        for key in ["weights", "biases"]:
-            self.s[layer.name][key] = self.beta * self.s[layer.name][key] + (
+        
+        for param_name, grad in grads.items():
+            if grad is None or param_name == "inputs":
+                continue
+            
+            if not hasattr(layer, param_name):
+                continue
+            
+            param_val = getattr(layer, param_name)
+            if param_val is None:
+                continue
+            
+            if param_name not in self.s[layer.name]:
+                self.s[layer.name][param_name] = np.zeros_like(grad)
+            
+            self.s[layer.name][param_name] = self.beta * self.s[layer.name][param_name] + (
                 1 - self.beta
-            ) * (grads[key] ** 2)
-            params[key] -= (
-                self.learning_rate
-                * grads[key]
-                / (np.sqrt(self.s[layer.name][key]) + self.epsilon)
+            ) * (grad ** 2)
+            
+            update = (
+                self.learning_rate * grad / (np.sqrt(self.s[layer.name][param_name]) + self.epsilon)
             )
+            setattr(layer, param_name, param_val - update)
 
     def to_dict(self) -> dict:
-        base_dict = super().to_dict()
-        base_dict.update(
-            {
-                "learning_rate": self.learning_rate,
-                "beta": self.beta,
-                "epsilon": self.epsilon,
-                "type": self.type,
-            }
-        )
-        return base_dict
+        return {
+            "learning_rate": self.learning_rate,
+            "beta": self.beta,
+            "epsilon": self.epsilon,
+            "type": self.type,
+        }
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -107,38 +126,60 @@ class Adam(Optimizer):
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
-        if m is None:
-            self.m = dict()
-        else:
-            self.m = m
-        if v is None:
-            self.v = dict()
-        else:
-            self.v = v
+        self.m = m if m is not None else dict()
+        self.v = v if v is not None else dict()
         self.t = t
 
     def initialize_state(self, layer: Any):
-        initial_dict = dict(
-            weights=np.zeros_like(layer.weights), biases=np.zeros_like(layer.biases)
-        )
-        self.m[layer.name] = initial_dict.copy()
-        self.v[layer.name] = initial_dict.copy()
+        """Initialize momentum and velocity for all learnable parameters."""
+        self.m[layer.name] = {}
+        self.v[layer.name] = {}
+        
+        # Find all learnable parameters (weights, biases, gamma, beta, etc.)
+        for attr_name in ['weights', 'biases', 'gamma', 'beta']:
+            if hasattr(layer, attr_name):
+                param = getattr(layer, attr_name)
+                if param is not None:
+                    self.m[layer.name][attr_name] = np.zeros_like(param)
+                    self.v[layer.name][attr_name] = np.zeros_like(param)
 
     def step(self, layer: Any, grads: Dict[str, np.ndarray]) -> np.ndarray:
         if self.m.get(layer.name) is None:
             self.initialize_state(layer)
-        params = {"weights": layer.weights, "biases": layer.biases}
+        
         self.t += 1
-        for key in ["weights", "biases"]:
-            self.m[layer.name][key] = (
-                self.beta1 * self.m[layer.name][key] + (1 - self.beta1) * grads[key]
+        
+        # Process all gradient keys generically
+        for param_name, grad in grads.items():
+            if grad is None or param_name == "inputs":
+                continue
+            
+            # Check if layer has this parameter and it's learnable
+            if not hasattr(layer, param_name):
+                continue
+            
+            param_val = getattr(layer, param_name)
+            if param_val is None:
+                continue
+            
+            # Initialize momentum/velocity if needed
+            if param_name not in self.m[layer.name]:
+                self.m[layer.name][param_name] = np.zeros_like(grad)
+                self.v[layer.name][param_name] = np.zeros_like(grad)
+            
+            # Adam update
+            self.m[layer.name][param_name] = (
+                self.beta1 * self.m[layer.name][param_name] + (1 - self.beta1) * grad
             )
-            self.v[layer.name][key] = self.beta2 * self.v[layer.name][key] + (
-                1 - self.beta2
-            ) * (grads[key] ** 2)
-            m_hat = self.m[layer.name][key] / (1 - self.beta1**self.t)
-            v_hat = self.v[layer.name][key] / (1 - self.beta2**self.t)
-            params[key] -= self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
+            self.v[layer.name][param_name] = (
+                self.beta2 * self.v[layer.name][param_name] + (1 - self.beta2) * (grad ** 2)
+            )
+            
+            m_hat = self.m[layer.name][param_name] / (1 - self.beta1 ** self.t)
+            v_hat = self.v[layer.name][param_name] / (1 - self.beta2 ** self.t)
+            
+            update = self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
+            setattr(layer, param_name, param_val - update)
 
     def to_dict(self) -> dict:
         return {
@@ -153,13 +194,12 @@ class Adam(Optimizer):
 
     @classmethod
     def from_dict(cls, data: dict):
-        obj = cls(
+        return cls(
             learning_rate=data.get("learning_rate", 0.001),
             beta1=data.get("beta1", 0.9),
             beta2=data.get("beta2", 0.999),
             epsilon=data.get("epsilon", 1e-8),
         )
-        return obj
 
     def save_state(self, filepath: str):
         """Save optimizer state to npz file."""
