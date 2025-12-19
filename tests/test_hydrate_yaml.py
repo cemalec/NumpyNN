@@ -1,4 +1,3 @@
-import os
 import pytest
 from pathlib import Path
 from configs.hydrate_yaml import hydrate_model
@@ -9,7 +8,6 @@ def _write_yaml(path: Path, content: str):
 
 
 def test_hydrate_yaml_creates_model(tmp_path: Path):
-
     yaml_content = """
 layers:
   - type: DenseLayer
@@ -46,8 +44,10 @@ optimizer:
     for layer in model.layers:
         # layer should expose at least input/output information or params
         assert hasattr(layer, "activation_function") or hasattr(layer, "type")
-        assert hasattr(layer, "weights") or hasattr(layer, "input_size") or hasattr(
-            layer, "output_size"
+        assert (
+            hasattr(layer, "weights")
+            or hasattr(layer, "input_size")
+            or hasattr(layer, "output_size")
         )
 
     # Model should implement forward and a loss/compute method

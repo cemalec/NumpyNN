@@ -1,7 +1,4 @@
 import numpy as np
-import pytest
-import numpy as np
-import pytest
 from Optimizer import SGD, RMSProp, Adam
 
 

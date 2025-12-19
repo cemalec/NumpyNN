@@ -1,6 +1,6 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/docker-outside-of-docker
-{   
+{
     "name": "NumpyNN Python Dev Container",
     "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
     "features": {
@@ -15,13 +15,13 @@
             "moby": true
         }
     },
-    
+
     // Mount host Docker socket to use host Docker instead of docker-in-docker
     // Comment out this section to use docker-in-docker exclusively
     "mounts": [
         "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind"
     ],
-    
+
     // Use this environment variable if you need to bind mount your local source code into a new container.
     "remoteEnv": {
         "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}",
@@ -32,7 +32,7 @@
     },
     "postCreateCommand": "pip install -r requirements.txt",
     "postStartCommand": "sudo chmod 666 /var/run/docker-host.sock || true",
-    
+
     "customizations": {
         "vscode": {
             "settings": {

@@ -6,10 +6,13 @@ from Optimizer import Optimizer
 from DifferentiableFunction import DifferentiableFunction
 
 
-dummy_loss = DifferentiableFunction(lambda y_true, y_pred: np.mean((y_true - y_pred) ** 2),
-                                    lambda y_true, y_pred: 2 * (y_pred - y_true) / y_true.size)
+dummy_loss = DifferentiableFunction(
+    lambda y_true, y_pred: np.mean((y_true - y_pred) ** 2),
+    lambda y_true, y_pred: 2 * (y_pred - y_true) / y_true.size,
+)
 
 dummy_activation = DifferentiableFunction(lambda x: x + 1, lambda x: np.ones_like(x))
+
 
 class DummyLayer(DenseLayer):
     def forward(self, inputs: np.ndarray) -> np.ndarray:
@@ -19,10 +22,12 @@ class DummyLayer(DenseLayer):
     def backward(self, grad_outputs: np.ndarray) -> dict:
         grad_inputs = grad_outputs  # pass gradient unchanged
         return {"inputs": grad_inputs}
-    
+
+
 dummy_layer = DummyLayer(2, 2, activation_function=dummy_activation)
 
 dummy_optimizer = Optimizer()
+
 
 class TestModel(unittest.TestCase):
     def setUp(self):
@@ -51,7 +56,7 @@ class TestModel(unittest.TestCase):
         y_pred = self.model.forward(self.x)
         self.model.backward(self.y_true, y_pred)
         for layer in self.layers:
-            self.assertTrue(hasattr(layer, 'inputs'))
+            self.assertTrue(hasattr(layer, "inputs"))
 
 
 if __name__ == "__main__":

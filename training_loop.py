@@ -1,9 +1,7 @@
 from Model import Model
-from Layer import DenseLayer
-from Dataset import *
-from Optimizer import *
+from Dataset import MNISTDataset, Dataset
 from configs.hydrate_yaml import hydrate_model
-from metrics import *
+from metrics import accuracy
 import numpy as np
 import argparse
 import logging
@@ -11,16 +9,18 @@ import logging
 # Create logger
 logger = logging.getLogger(__name__)
 
+
 # basic_model = Model.load('models/adam_model.npz')
-def training_loop(
-    model: Model, dataset: Dataset, epochs: int, batch_size: int):
+def training_loop(model: Model, dataset: Dataset, epochs: int, batch_size: int):
     for epoch in range(epochs):
         i = 0
         batch_accuracies = []
         batch_losses = []
         for x_train, y_train in dataset.get_batches(batch_size):
             logger.debug(f"Epoch {epoch+1}, Batch {i+1}")
-            logger.debug(f"x_train shape: {x_train.shape}, y_train shape: {y_train.shape}")
+            logger.debug(
+                f"x_train shape: {x_train.shape}, y_train shape: {y_train.shape}"
+            )
             # Forward pass
             y_pred = model.forward(x_train)
 
@@ -57,13 +57,22 @@ if __name__ == "__main__":
         "--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer"
     )
     argparser.add_argument(
-        "--model_save_path", type=str, default="models/bigger_model.npz", help="Path to save the trained model"
+        "--model_save_path",
+        type=str,
+        default="models/bigger_model.npz",
+        help="Path to save the trained model",
     )
     argparser.add_argument(
-        "--model_load_path", type=str, default=None, help="Path to load a pre-trained model"
+        "--model_load_path",
+        type=str,
+        default=None,
+        help="Path to load a pre-trained model",
     )
     argparser.add_argument(
-        "--model_config", type=str, default="configs/fully_connected.yaml", help="Path to model configuration YAML file"
+        "--model_config",
+        type=str,
+        default="configs/fully_connected.yaml",
+        help="Path to model configuration YAML file",
     )
     argparser.add_argument("--log_level", type=str, default="INFO")
     # Parse command line arguments
@@ -80,7 +89,7 @@ if __name__ == "__main__":
         basic_model = Model.load(model_load_path)
         logger.info(f"Loaded model from {model_load_path}")
     elif model_config:
-    # Configure logging
+        # Configure logging
         basic_model = hydrate_model(model_config)
         logger.info(f"Hydrated model from {model_config}")
     # Configure logging
@@ -88,7 +97,6 @@ if __name__ == "__main__":
         level=getattr(logging, log_level, None),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-    
 
     # Load Dataset
     logger.info("Loading MNIST Dataset")

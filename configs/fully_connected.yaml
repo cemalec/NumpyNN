@@ -1,4 +1,4 @@
-layers: 
+layers:
   - name: input
     type: DenseLayer
     input_size: 784
@@ -15,7 +15,7 @@ layers:
     output_size: 10
     activation_function: SoftMax
 loss: CrossEntropyLoss
-optimizer: 
+optimizer:
   type: Adam
   learning_rate: 3e-6
   beta1: 0.9

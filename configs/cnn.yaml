@@ -1,8 +1,8 @@
-layers: 
+layers:
   - name: reshape
     type: ReshapeLayer
     output_shape: [1, 28, 28]
-  
+
   - name: conv1
     type: CNNLayer
     input_size: [1, 28, 28]
@@ -12,16 +12,16 @@ layers:
     padding: 0
     stride: 1
     activation_function: 'ReLU'
-  
+
   - name: bn1
     type: BatchNormLayer
     num_features: 16
-  
+
   - name: pool1
     type: MaxPoolLayer
     pool_size: 2
     stride: 2
-  
+
   - name: conv2
     type: CNNLayer
     input_size: [16, 13, 13]
@@ -31,19 +31,19 @@ layers:
     padding: 0
     stride: 1
     activation_function: 'ReLU'
-  
+
   - name: bn2
     type: BatchNormLayer
     num_features: 32
-  
+
   - name: pool2
     type: MaxPoolLayer
     pool_size: 2
     stride: 2
-  
+
   - name: flatten
     type: FlattenLayer
-  
+
   - name: output
     type: DenseLayer
     input_size: 800
@@ -51,7 +51,7 @@ layers:
     activation_function: 'SoftMax'
 
 loss: CrossEntropyLoss
-optimizer: 
+optimizer:
   type: Adam
   learning_rate: 0.001
   beta1: 0.9

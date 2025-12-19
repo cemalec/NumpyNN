@@ -32,10 +32,10 @@ class SGD(Optimizer):
         for param_name, grad in grads.items():
             if grad is None or param_name == "inputs":
                 continue
-            
+
             if not hasattr(layer, param_name):
                 continue
-            
+
             param_val = getattr(layer, param_name)
             if param_val is not None:
                 setattr(layer, param_name, param_val - self.learning_rate * grad)
@@ -59,7 +59,7 @@ class RMSProp(Optimizer):
 
     def initialize_state(self, layer: Any):
         self.s[layer.name] = {}
-        for attr_name in ['weights', 'biases', 'gamma', 'beta']:
+        for attr_name in ["weights", "biases", "gamma", "beta"]:
             if hasattr(layer, attr_name):
                 param = getattr(layer, attr_name)
                 if param is not None:
@@ -68,27 +68,29 @@ class RMSProp(Optimizer):
     def step(self, layer: Any, grads: Dict[str, np.ndarray]) -> np.ndarray:
         if self.s.get(layer.name) is None:
             self.initialize_state(layer)
-        
+
         for param_name, grad in grads.items():
             if grad is None or param_name == "inputs":
                 continue
-            
+
             if not hasattr(layer, param_name):
                 continue
-            
+
             param_val = getattr(layer, param_name)
             if param_val is None:
                 continue
-            
+
             if param_name not in self.s[layer.name]:
                 self.s[layer.name][param_name] = np.zeros_like(grad)
-            
-            self.s[layer.name][param_name] = self.beta * self.s[layer.name][param_name] + (
-                1 - self.beta
-            ) * (grad ** 2)
-            
+
+            self.s[layer.name][param_name] = self.beta * self.s[layer.name][
+                param_name
+            ] + (1 - self.beta) * (grad**2)
+
             update = (
-                self.learning_rate * grad / (np.sqrt(self.s[layer.name][param_name]) + self.epsilon)
+                self.learning_rate
+                * grad
+                / (np.sqrt(self.s[layer.name][param_name]) + self.epsilon)
             )
             setattr(layer, param_name, param_val - update)
 
@@ -134,9 +136,9 @@ class Adam(Optimizer):
         """Initialize momentum and velocity for all learnable parameters."""
         self.m[layer.name] = {}
         self.v[layer.name] = {}
-        
+
         # Find all learnable parameters (weights, biases, gamma, beta, etc.)
-        for attr_name in ['weights', 'biases', 'gamma', 'beta']:
+        for attr_name in ["weights", "biases", "gamma", "beta"]:
             if hasattr(layer, attr_name):
                 param = getattr(layer, attr_name)
                 if param is not None:
@@ -146,38 +148,38 @@ class Adam(Optimizer):
     def step(self, layer: Any, grads: Dict[str, np.ndarray]) -> np.ndarray:
         if self.m.get(layer.name) is None:
             self.initialize_state(layer)
-        
+
         self.t += 1
-        
+
         # Process all gradient keys generically
         for param_name, grad in grads.items():
             if grad is None or param_name == "inputs":
                 continue
-            
+
             # Check if layer has this parameter and it's learnable
             if not hasattr(layer, param_name):
                 continue
-            
+
             param_val = getattr(layer, param_name)
             if param_val is None:
                 continue
-            
+
             # Initialize momentum/velocity if needed
             if param_name not in self.m[layer.name]:
                 self.m[layer.name][param_name] = np.zeros_like(grad)
                 self.v[layer.name][param_name] = np.zeros_like(grad)
-            
+
             # Adam update
             self.m[layer.name][param_name] = (
                 self.beta1 * self.m[layer.name][param_name] + (1 - self.beta1) * grad
             )
-            self.v[layer.name][param_name] = (
-                self.beta2 * self.v[layer.name][param_name] + (1 - self.beta2) * (grad ** 2)
-            )
-            
-            m_hat = self.m[layer.name][param_name] / (1 - self.beta1 ** self.t)
-            v_hat = self.v[layer.name][param_name] / (1 - self.beta2 ** self.t)
-            
+            self.v[layer.name][param_name] = self.beta2 * self.v[layer.name][
+                param_name
+            ] + (1 - self.beta2) * (grad**2)
+
+            m_hat = self.m[layer.name][param_name] / (1 - self.beta1**self.t)
+            v_hat = self.v[layer.name][param_name] / (1 - self.beta2**self.t)
+
             update = self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
             setattr(layer, param_name, param_val - update)
 
@@ -208,22 +210,26 @@ class Adam(Optimizer):
             t=self.t,
             m_keys=list(self.m.keys()),
             v_keys=list(self.v.keys()),
-            **{f'm_{k}_weights': v['weights'] for k, v in self.m.items()},
-            **{f'm_{k}_biases': v['biases'] for k, v in self.m.items()},
-            **{f'v_{k}_weights': v['weights'] for k, v in self.v.items()},
-            **{f'v_{k}_biases': v['biases'] for k, v in self.v.items()},
+            **{f"m_{k}_weights": v["weights"] for k, v in self.m.items()},
+            **{f"m_{k}_biases": v["biases"] for k, v in self.m.items()},
+            **{f"v_{k}_weights": v["weights"] for k, v in self.v.items()},
+            **{f"v_{k}_biases": v["biases"] for k, v in self.v.items()},
         )
 
     @classmethod
     def load_state(cls, filepath: str, learning_rate: float, **kwargs):
         """Load optimizer state from npz file."""
         data = np.load(filepath, allow_pickle=True)
-        m_keys = data['m_keys']
-        v_keys = data['v_keys']
+        m_keys = data["m_keys"]
+        v_keys = data["v_keys"]
 
-        m = {k: {'weights': data[f'm_{k}_weights'], 'biases': data[f'm_{k}_biases']}
-             for k in m_keys}
-        v = {k: {'weights': data[f'v_{k}_weights'], 'biases': data[f'v_{k}_biases']}
-             for k in v_keys}
+        m = {
+            k: {"weights": data[f"m_{k}_weights"], "biases": data[f"m_{k}_biases"]}
+            for k in m_keys
+        }
+        v = {
+            k: {"weights": data[f"v_{k}_weights"], "biases": data[f"v_{k}_biases"]}
+            for k in v_keys
+        }
 
-        return cls(learning_rate=learning_rate, t=int(data['t']), m=m, v=v, **kwargs)
+        return cls(learning_rate=learning_rate, t=int(data["t"]), m=m, v=v, **kwargs)
