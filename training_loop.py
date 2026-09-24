@@ -84,6 +84,10 @@ if __name__ == "__main__":
     model_load_path = args.model_load_path
     model_config = args.model_config
     model_save_path = args.model_save_path
+    logging.basicConfig(
+        level=getattr(logging, log_level, None),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     if model_load_path:
         # Load pre-trained model
         basic_model = Model.load(model_load_path)
@@ -92,11 +96,7 @@ if __name__ == "__main__":
         # Configure logging
         basic_model = hydrate_model(model_config)
         logger.info(f"Hydrated model from {model_config}")
-    # Configure logging
-    logging.basicConfig(
-        level=getattr(logging, log_level, None),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    basic_model.optimizer.learning_rate = learning_rate
 
     # Load Dataset
     logger.info("Loading MNIST Dataset")
