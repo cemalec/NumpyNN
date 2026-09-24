@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import pandas as pd
-from Dataset import ParquetDataset, MNISTDataset
+from Dataset import Dataset, ParquetDataset, MNISTDataset
 from PIL import Image
 import io
 
@@ -48,3 +48,22 @@ def test_mnist_dataset_pil_images(sample_parquet):
 
     assert dataset.y.shape == (5, 10)
     np.testing.assert_array_equal(np.argmax(dataset.y, axis=1), df["label"].values)
+
+
+def test_train_validation_split_preserves_dataset_labels():
+    dataset = Dataset(np.arange(10).reshape(5, 2), np.arange(5))
+
+    train, validation = dataset.train_validation_split(0.6)
+
+    assert dataset.split == "train"
+    assert train.split == "train"
+    assert validation.split == "validation"
+    assert len(train) == 3
+    assert len(validation) == 2
+
+
+def test_train_validation_split_rejects_invalid_ratio():
+    dataset = Dataset(np.arange(4).reshape(2, 2), np.arange(2))
+
+    with pytest.raises(ValueError, match="train_ratio"):
+        dataset.train_validation_split(1.0)

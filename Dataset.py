@@ -49,11 +49,13 @@ class Dataset:
         self.X = self.preprocess_data()
         self.y = self.preprocess_labels()
 
-    def split(self, train_ratio: float):
+    def train_validation_split(self, train_ratio: float):
+        if not 0 < train_ratio < 1:
+            raise ValueError("train_ratio must be between 0 and 1")
         split_idx = int(len(self.X) * train_ratio)
         X_train, y_train = self.X[:split_idx], self.y[:split_idx]
         X_val, y_val = self.X[split_idx:], self.y[split_idx:]
-        return self.__class__(X_train, y_train, split="train"), self.__class__(
+        return Dataset(X_train, y_train, split="train"), Dataset(
             X_val, y_val, split="validation"
         )
 
