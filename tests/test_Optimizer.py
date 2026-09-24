@@ -149,3 +149,20 @@ def test_adam_step_two_updates():
     assert layer.name in opt.m and layer.name in opt.v
     np.testing.assert_allclose(opt.m[layer.name]["biases"], expected_m["biases"])
     np.testing.assert_allclose(opt.v[layer.name]["biases"], expected_v["biases"])
+
+
+def test_adam_state_round_trip_preserves_all_parameter_types(tmp_path):
+    optimizer = Adam(
+        learning_rate=0.01,
+        m={"batch_norm": {"gamma": np.array([0.1]), "beta": np.array([0.2])}},
+        v={"batch_norm": {"gamma": np.array([0.3]), "beta": np.array([0.4])}},
+        t=4,
+    )
+    path = tmp_path / "optimizer.npz"
+
+    optimizer.save_state(path)
+    restored = Adam.load_state(path, learning_rate=0.01)
+
+    assert restored.t == 4
+    np.testing.assert_array_equal(restored.m["batch_norm"]["gamma"], [0.1])
+    np.testing.assert_array_equal(restored.v["batch_norm"]["beta"], [0.4])

@@ -189,6 +189,7 @@ class Adam(Optimizer):
             "beta1": self.beta1,
             "beta2": self.beta2,
             "epsilon": self.epsilon,
+            "type": self.type,
             "m": self.m,
             "v": self.v,
             "t": self.t,
@@ -201,6 +202,9 @@ class Adam(Optimizer):
             beta1=data.get("beta1", 0.9),
             beta2=data.get("beta2", 0.999),
             epsilon=data.get("epsilon", 1e-8),
+            m=data.get("m"),
+            v=data.get("v"),
+            t=data.get("t", 0),
         )
 
     def save_state(self, filepath: str):
@@ -208,28 +212,15 @@ class Adam(Optimizer):
         np.savez(
             filepath,
             t=self.t,
-            m_keys=list(self.m.keys()),
-            v_keys=list(self.v.keys()),
-            **{f"m_{k}_weights": v["weights"] for k, v in self.m.items()},
-            **{f"m_{k}_biases": v["biases"] for k, v in self.m.items()},
-            **{f"v_{k}_weights": v["weights"] for k, v in self.v.items()},
-            **{f"v_{k}_biases": v["biases"] for k, v in self.v.items()},
+            m=np.array(self.m, dtype=object),
+            v=np.array(self.v, dtype=object),
         )
 
     @classmethod
     def load_state(cls, filepath: str, learning_rate: float, **kwargs):
         """Load optimizer state from npz file."""
         data = np.load(filepath, allow_pickle=True)
-        m_keys = data["m_keys"]
-        v_keys = data["v_keys"]
-
-        m = {
-            k: {"weights": data[f"m_{k}_weights"], "biases": data[f"m_{k}_biases"]}
-            for k in m_keys
-        }
-        v = {
-            k: {"weights": data[f"v_{k}_weights"], "biases": data[f"v_{k}_biases"]}
-            for k in v_keys
-        }
+        m = data["m"].item()
+        v = data["v"].item()
 
         return cls(learning_rate=learning_rate, t=int(data["t"]), m=m, v=v, **kwargs)
