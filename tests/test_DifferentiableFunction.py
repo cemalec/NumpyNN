@@ -1,5 +1,12 @@
 import numpy as np
-from DifferentiableFunction import DifferentiableFunction, GeLU, SoftMax, ReLU, Sigmoid
+from DifferentiableFunction import (
+    CrossEntropyLoss,
+    DifferentiableFunction,
+    GeLU,
+    SoftMax,
+    ReLU,
+    Sigmoid,
+)
 
 
 def test_softmax_function():
@@ -82,3 +89,25 @@ def test_differentiable_function_interface():
     x = np.array([1.0, 2.0, 3.0])
     assert np.all(func.function(x) == x**2)
     assert np.all(func.derivative(x) == 2 * x)
+
+
+def test_cross_entropy_handles_sequence_predictions():
+    targets = np.array(
+        [
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        ]
+    )
+    predictions = np.array(
+        [
+            [[0.7, 0.2, 0.1], [0.1, 0.8, 0.1]],
+            [[0.2, 0.3, 0.5], [0.6, 0.2, 0.2]],
+        ]
+    )
+    loss = CrossEntropyLoss()
+
+    result = loss.function(targets, predictions)
+    gradient = loss.derivative(targets, predictions)
+
+    np.testing.assert_allclose(result, -np.mean(np.log([0.7, 0.8, 0.5, 0.6])))
+    np.testing.assert_allclose(gradient, (predictions - targets) / 4)

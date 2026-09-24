@@ -13,6 +13,7 @@ from Layer import (
     EmbeddingLayer,
     LayerNormLayer,
     TransformerBlock,
+    VocabularyProjectionLayer,
 )
 from DifferentiableFunction import GeLU, ReLU
 
@@ -863,3 +864,16 @@ def test_transformer_block_returns_input_and_parameter_gradients():
         gradient.shape == block.parameters()[name].shape
         for name, gradient in gradients.parameter_gradients.items()
     )
+
+
+def test_vocabulary_projection_maps_each_token_to_probabilities():
+    layer = VocabularyProjectionLayer(embedding_dim=2, vocab_size=3)
+    layer.weights = np.array([[0.2, -0.1, 0.3], [0.4, 0.5, -0.2]])
+    layer.biases = np.zeros(3)
+    layer.weights_initialized = True
+    inputs = np.array([[[1.0, 0.0], [0.0, 1.0]]])
+
+    probabilities = layer.forward(inputs)
+
+    assert probabilities.shape == (1, 2, 3)
+    np.testing.assert_allclose(np.sum(probabilities, axis=-1), 1.0)

@@ -197,6 +197,32 @@ class DenseLayer(Layer):
         return layer
 
 
+class VocabularyProjectionLayer(DenseLayer):
+    """Project sequence embeddings to vocabulary probabilities with SoftMax."""
+
+    def __init__(self, embedding_dim: int, vocab_size: int, name: str = None):
+        super().__init__(embedding_dim, vocab_size, SoftMax(), name=name)
+        self.type = "VocabularyProjectionLayer"
+        self.embedding_dim = embedding_dim
+        self.vocab_size = vocab_size
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "embedding_dim": self.embedding_dim,
+            "vocab_size": self.vocab_size,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "VocabularyProjectionLayer":
+        return cls(
+            embedding_dim=data["embedding_dim"],
+            vocab_size=data["vocab_size"],
+            name=data.get("name"),
+        )
+
+
 class CNNLayer(Layer):
     def __init__(
         self,

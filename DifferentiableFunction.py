@@ -69,19 +69,21 @@ class Sigmoid(DifferentiableFunction):
 class CrossEntropyLoss(DifferentiableFunction):
     def __init__(self):
         def cross_entropy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-            m = y_true.shape[0]
-            p = y_pred
-            log_likelihood = -np.log(p[range(m), y_true.argmax(axis=1)] + 1e-15)
-            loss = np.sum(log_likelihood) / m
-            return loss
+            if y_true.shape != y_pred.shape or y_true.ndim < 2:
+                raise ValueError(
+                    "CrossEntropyLoss expects matching targets and predictions with a class axis"
+                )
+            probabilities = np.clip(y_pred, 1e-15, 1.0)
+            return np.mean(-np.sum(y_true * np.log(probabilities), axis=-1))
 
         def cross_entropy_derivative(
             y_true: np.ndarray, y_pred: np.ndarray
         ) -> np.ndarray:
-            # Assumes y_pred is the output of softmax and y_true is one-hot encoded
-            m = y_true.shape[0]
-            grad = (y_pred - y_true) / m
-            return grad
-            # shape[0] gives the batch size, so the derivative is averaged over the batch
+            if y_true.shape != y_pred.shape or y_true.ndim < 2:
+                raise ValueError(
+                    "CrossEntropyLoss expects matching targets and predictions with a class axis"
+                )
+            sample_count = np.prod(y_true.shape[:-1])
+            return (y_pred - y_true) / sample_count
 
         super().__init__(cross_entropy, cross_entropy_derivative)

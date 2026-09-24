@@ -11,6 +11,7 @@ from Layer import (
     LayerNormLayer,
     PositionalEncodingLayer,
     TransformerBlock,
+    VocabularyProjectionLayer,
 )
 from Optimizer import Optimizer, SGD
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, SoftMax
@@ -234,6 +235,22 @@ def test_model_backward_updates_transformer_block_parameters():
         not np.array_equal(block.parameters()[name], parameter)
         for name, parameter in original_parameters.items()
     )
+
+
+def test_model_backward_updates_vocabulary_projection_for_sequences():
+    projection = VocabularyProjectionLayer(embedding_dim=2, vocab_size=3, name="vocab")
+    projection.weights = np.array([[0.2, -0.1, 0.3], [0.4, 0.5, -0.2]])
+    projection.biases = np.zeros(3)
+    projection.weights_initialized = True
+    model = Model([projection], CrossEntropyLoss(), SGD(learning_rate=0.1))
+    inputs = np.array([[[1.0, 0.0], [0.0, 1.0]]])
+    targets = np.array([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]])
+    predictions = model.forward(inputs)
+    original_weights = projection.weights.copy()
+
+    model.backward(targets, predictions)
+
+    assert not np.array_equal(projection.weights, original_weights)
 
 
 @pytest.mark.parametrize(

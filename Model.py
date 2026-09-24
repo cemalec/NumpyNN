@@ -13,6 +13,7 @@ from Layer import (
     PositionalEncodingLayer,
     ReshapeLayer,
     TransformerBlock,
+    VocabularyProjectionLayer,
 )
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, ReLU, Sigmoid, SoftMax
 from Optimizer import Adam, Optimizer, RMSProp, SGD
@@ -34,6 +35,7 @@ LAYER_TYPES = {
     "PositionalEncodingLayer": PositionalEncodingLayer,
     "DotProductAttentionLayer": DotProductAttentionLayer,
     "TransformerBlock": TransformerBlock,
+    "VocabularyProjectionLayer": VocabularyProjectionLayer,
 }
 LOSS_TYPES = {"CrossEntropyLoss": CrossEntropyLoss}
 OPTIMIZER_TYPES = {"SGD": SGD, "RMSProp": RMSProp, "Adam": Adam}
