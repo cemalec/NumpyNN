@@ -888,3 +888,61 @@ class BatchNormLayer(Layer):
             epsilon=data.get("epsilon", 1e-5),
             name=data.get("name"),
         )
+
+
+class EmbeddingLayer(Layer):
+    """Map integer token IDs to vectors from a trainable lookup table.
+
+    The backward pass returns ``None`` for input gradients because token IDs are
+    discrete. Gradients for repeated token IDs accumulate in the lookup table.
+    """
+
+    def __init__(self, vocab_size: int, embedding_dim: int, name: str = None):
+        super().__init__()
+        if vocab_size <= 0 or embedding_dim <= 0:
+            raise ValueError("vocab_size and embedding_dim must be positive")
+        self.name = name
+        self.type = "EmbeddingLayer"
+        self.vocab_size = vocab_size
+        self.embedding_dim = embedding_dim
+
+    def initialize_weights(self):
+        self.weights = np.random.randn(self.vocab_size, self.embedding_dim) * 0.01
+        logger.info(f"Embedding weights initialized for layer {self.name}")
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        if input_data.ndim != 2:
+            raise ValueError("EmbeddingLayer expects 2D token IDs")
+        if not np.issubdtype(input_data.dtype, np.integer):
+            raise ValueError("EmbeddingLayer expects integer token IDs")
+        if np.any(input_data < 0) or np.any(input_data >= self.vocab_size):
+            raise ValueError("EmbeddingLayer token IDs are out of range")
+
+        super().forward(input_data)
+        self.last_input = input_data
+        return self.weights[input_data]
+
+    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+        expected_shape = self.last_input.shape + (self.embedding_dim,)
+        if output_gradient.shape != expected_shape:
+            raise ValueError("EmbeddingLayer gradient has the wrong shape")
+
+        weight_gradient = np.zeros_like(self.weights)
+        np.add.at(weight_gradient, self.last_input, output_gradient)
+        return {"inputs": None, "weights": weight_gradient}
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "vocab_size": self.vocab_size,
+            "embedding_dim": self.embedding_dim,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "EmbeddingLayer":
+        return cls(
+            vocab_size=data["vocab_size"],
+            embedding_dim=data["embedding_dim"],
+            name=data.get("name"),
+        )

@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from Model import Model
-from Layer import BatchNormLayer, DenseLayer
+from Layer import BatchNormLayer, DenseLayer, EmbeddingLayer
 from Optimizer import Optimizer, SGD
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, SoftMax
 
@@ -106,6 +106,20 @@ def test_model_save_and_load_uses_layer_parameters(tmp_path):
     assert set(batch_norm.parameters()) == {"gamma", "beta"}
     np.testing.assert_array_equal(restored.layers[0].gamma, batch_norm.gamma)
     np.testing.assert_array_equal(restored.layers[0].beta, batch_norm.beta)
+
+
+def test_model_save_and_load_preserves_embedding_weights(tmp_path):
+    embedding = EmbeddingLayer(vocab_size=3, embedding_dim=2, name="tokens")
+    embedding.weights = np.array([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]])
+    embedding.weights_initialized = True
+    model = Model([embedding], CrossEntropyLoss(), SGD(learning_rate=0.1))
+    path = tmp_path / "embedding_model.npz"
+
+    model.save(str(path))
+    restored = Model.load(str(path))
+
+    assert isinstance(restored.layers[0], EmbeddingLayer)
+    np.testing.assert_array_equal(restored.layers[0].weights, embedding.weights)
 
 
 if __name__ == "__main__":

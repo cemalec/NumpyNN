@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from Layer import (
     DenseLayer,
     Layer,
@@ -6,6 +7,7 @@ from Layer import (
     FlattenLayer,
     ReshapeLayer,
     BatchNormLayer,
+    EmbeddingLayer,
 )
 from DifferentiableFunction import GeLU, ReLU
 
@@ -507,3 +509,61 @@ def test_batchnorm_to_dict_and_from_dict():
     assert restored_layer.num_features == layer.num_features
     assert restored_layer.momentum == layer.momentum
     assert restored_layer.epsilon == layer.epsilon
+
+
+def test_embedding_layer_looks_up_token_vectors():
+    layer = EmbeddingLayer(vocab_size=4, embedding_dim=2, name="tokens")
+    layer.weights = np.array([[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]])
+    layer.weights_initialized = True
+
+    output = layer.forward(np.array([[2, 0], [1, 2]]))
+
+    np.testing.assert_array_equal(
+        output,
+        np.array([[[4.0, 5.0], [0.0, 1.0]], [[2.0, 3.0], [4.0, 5.0]]]),
+    )
+
+
+def test_embedding_layer_accumulates_repeated_token_gradients():
+    layer = EmbeddingLayer(vocab_size=3, embedding_dim=2)
+    layer.weights = np.zeros((3, 2))
+    layer.weights_initialized = True
+    layer.forward(np.array([[1, 1, 2]]))
+
+    gradients = layer.backward(np.array([[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]]))
+
+    assert gradients["inputs"] is None
+    np.testing.assert_array_equal(
+        gradients["weights"], np.array([[0.0, 0.0], [4.0, 6.0], [5.0, 6.0]])
+    )
+
+
+def test_embedding_layer_validates_token_ids():
+    layer = EmbeddingLayer(vocab_size=3, embedding_dim=2)
+
+    with pytest.raises(ValueError, match="integer"):
+        layer.forward(np.array([[1.0]]))
+    with pytest.raises(ValueError, match="out of range"):
+        layer.forward(np.array([[3]]))
+
+
+def test_embedding_weight_gradient_matches_finite_difference():
+    layer = EmbeddingLayer(vocab_size=3, embedding_dim=2)
+    layer.weights = np.array([[0.1, -0.2], [0.3, 0.4], [-0.5, 0.6]])
+    layer.weights_initialized = True
+    token_ids = np.array([[0, 1, 0]])
+    output_gradient = np.array([[[0.7, -0.1], [0.2, 0.5], [-0.3, 0.4]]])
+    layer.forward(token_ids)
+    analytic_gradient = layer.backward(output_gradient)["weights"]
+    epsilon = 1e-6
+    index = (0, 1)
+    original_value = layer.weights[index]
+
+    layer.weights[index] = original_value + epsilon
+    positive_loss = np.sum(layer.forward(token_ids) * output_gradient)
+    layer.weights[index] = original_value - epsilon
+    negative_loss = np.sum(layer.forward(token_ids) * output_gradient)
+    layer.weights[index] = original_value
+
+    numerical_gradient = (positive_loss - negative_loss) / (2 * epsilon)
+    np.testing.assert_allclose(analytic_gradient[index], numerical_gradient)
