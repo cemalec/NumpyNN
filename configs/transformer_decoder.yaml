@@ -1,0 +1,24 @@
+# Decoder-style example without causal masking; all positions can attend to each other.
+layers:
+  - type: EmbeddingLayer
+    name: tokens
+    vocab_size: 32
+    embedding_dim: 8
+  - type: PositionalEncodingLayer
+    name: positions
+    embedding_dim: 8
+  - type: TransformerBlock
+    name: decoder_block
+    embedding_dim: 8
+    feed_forward_dim: 32
+  - type: VocabularyProjectionLayer
+    name: vocabulary
+    embedding_dim: 8
+    vocab_size: 32
+loss: CrossEntropyLoss
+optimizer:
+  type: Adam
+  learning_rate: 0.001
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1e-8

@@ -90,6 +90,27 @@ optimizer:
     assert model.layers[0].embedding_dim == 4
 
 
+def test_hydrate_yaml_creates_embedding_layer(tmp_path: Path):
+    yaml_content = """
+layers:
+  - type: EmbeddingLayer
+    name: tokens
+    vocab_size: 10
+    embedding_dim: 4
+loss: CrossEntropyLoss
+optimizer:
+  type: SGD
+  learning_rate: 0.1
+"""
+    cfg_path = tmp_path / "embedding_config.yaml"
+    _write_yaml(cfg_path, yaml_content)
+
+    model = hydrate_model(str(cfg_path))
+
+    assert model.layers[0].type == "EmbeddingLayer"
+    assert model.layers[0].vocab_size == 10
+
+
 def test_hydrate_yaml_creates_positional_encoding_layer(tmp_path: Path):
     yaml_content = """
 layers:
@@ -150,3 +171,24 @@ optimizer:
     assert model.layers[0].type == "TransformerBlock"
     assert model.layers[0].embedding_dim == 4
     assert model.layers[0].feed_forward_dim == 8
+
+
+def test_hydrate_yaml_creates_vocabulary_projection_layer(tmp_path: Path):
+    yaml_content = """
+layers:
+  - type: VocabularyProjectionLayer
+    name: vocabulary
+    embedding_dim: 4
+    vocab_size: 10
+loss: CrossEntropyLoss
+optimizer:
+  type: SGD
+  learning_rate: 0.1
+"""
+    cfg_path = tmp_path / "vocabulary_config.yaml"
+    _write_yaml(cfg_path, yaml_content)
+
+    model = hydrate_model(str(cfg_path))
+
+    assert model.layers[0].type == "VocabularyProjectionLayer"
+    assert model.layers[0].vocab_size == 10

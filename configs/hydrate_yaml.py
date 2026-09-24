@@ -62,6 +62,13 @@ class BatchNormLayerConfig(BaseModel):
     name: str = None
 
 
+class EmbeddingLayerConfig(BaseModel):
+    type: str = "EmbeddingLayer"
+    vocab_size: int
+    embedding_dim: int
+    name: str = None
+
+
 class DotProductAttentionLayerConfig(BaseModel):
     type: str = "DotProductAttentionLayer"
     embedding_dim: int
@@ -88,6 +95,13 @@ class TransformerBlockConfig(BaseModel):
     name: str = None
 
 
+class VocabularyProjectionLayerConfig(BaseModel):
+    type: str = "VocabularyProjectionLayer"
+    embedding_dim: int
+    vocab_size: int
+    name: str = None
+
+
 LayerConfigType: TypeAlias = (
     LayerConfig
     | CNNLayerConfig
@@ -95,10 +109,12 @@ LayerConfigType: TypeAlias = (
     | ReshapeLayerConfig
     | MaxPoolLayerConfig
     | BatchNormLayerConfig
+    | EmbeddingLayerConfig
     | DotProductAttentionLayerConfig
     | PositionalEncodingLayerConfig
     | LayerNormLayerConfig
     | TransformerBlockConfig
+    | VocabularyProjectionLayerConfig
 )
 
 
@@ -122,6 +138,8 @@ def get_layer_model(layer_type: str):
         return MaxPoolLayerConfig
     elif layer_type == "BatchNormLayer":
         return BatchNormLayerConfig
+    elif layer_type == "EmbeddingLayer":
+        return EmbeddingLayerConfig
     elif layer_type == "DotProductAttentionLayer":
         return DotProductAttentionLayerConfig
     elif layer_type == "PositionalEncodingLayer":
@@ -130,6 +148,8 @@ def get_layer_model(layer_type: str):
         return LayerNormLayerConfig
     elif layer_type == "TransformerBlock":
         return TransformerBlockConfig
+    elif layer_type == "VocabularyProjectionLayer":
+        return VocabularyProjectionLayerConfig
     else:
         raise ValueError(f"Unsupported layer type: {layer_type}")
 
