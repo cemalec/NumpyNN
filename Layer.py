@@ -13,6 +13,11 @@ ACTIVATION_TYPES = {
 }
 
 
+def _require_positive_int(value: int, name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+
+
 @dataclass
 class LayerGradients:
     """Gradients produced by one layer's backward pass."""
@@ -85,6 +90,8 @@ class DenseLayer(Layer):
         name: str = None,
     ):
         super().__init__()
+        _require_positive_int(input_size, "input_size")
+        _require_positive_int(output_size, "output_size")
         self.name = name
         self.type = "Dense"
         self.input_size = input_size
@@ -110,6 +117,11 @@ class DenseLayer(Layer):
         Returns:
             np.ndarray: Output after applying weights, biases, and activation function. Shape: (batch_size, output_size)
         """
+        if input_data.ndim != 2:
+            raise ValueError("DenseLayer expects 2D input")
+        if input_data.shape[1] != self.input_size:
+            raise ValueError("DenseLayer input feature dimension does not match input_size")
+
         super().forward(input_data)
         self.last_input = input_data
         self.last_z = (
@@ -175,7 +187,10 @@ class DenseLayer(Layer):
 
     @classmethod
     def from_dict(cls, data: Dict) -> "DenseLayer":
-        activation_function = ACTIVATION_TYPES[data["activation_function"]]()
+        activation_name = data["activation_function"]
+        if activation_name not in ACTIVATION_TYPES:
+            raise ValueError(f"Unsupported activation type: {activation_name}")
+        activation_function = ACTIVATION_TYPES[activation_name]()
         layer = cls(
             input_size=data["input_size"],
             output_size=data["output_size"],
@@ -198,6 +213,15 @@ class CNNLayer(Layer):
         name: str = None,
     ):
         super().__init__()
+        if len(input_size) != 3 or any(dimension <= 0 for dimension in input_size):
+            raise ValueError("CNNLayer input_size must contain three positive dimensions")
+        if len(output_size) != 3 or any(dimension <= 0 for dimension in output_size):
+            raise ValueError("CNNLayer output_size must contain three positive dimensions")
+        _require_positive_int(kernel_size, "kernel_size")
+        _require_positive_int(num_filters, "num_filters")
+        _require_positive_int(stride, "stride")
+        if padding < 0:
+            raise ValueError("padding must be non-negative")
         self.name = name
         self.type = "CNN"
         self.input_size = input_size
@@ -237,12 +261,21 @@ class CNNLayer(Layer):
         return input_data
 
     def forward(self, input_data: np.ndarray) -> np.ndarray:
+        if input_data.ndim != 4:
+            raise ValueError("CNNLayer expects 4D input")
+        if input_data.shape[1] != self.input_size[0]:
+            raise ValueError("CNNLayer input channel dimension does not match input_size")
+
         super().forward(input_data)
         input_data = self.pad_input(input_data)
 
         batch_size, in_channels, height, width = input_data.shape
+        if height < self.kernel_size or width < self.kernel_size:
+            raise ValueError("CNNLayer kernel_size exceeds input spatial dimensions")
         output_height = (height - self.kernel_size) // self.stride + 1
         output_width = (width - self.kernel_size) // self.stride + 1
+        if (self.num_filters, output_height, output_width) != tuple(self.output_size):
+            raise ValueError("CNNLayer output_size does not match its configuration")
 
         # Create strided view of input for all windows at once
         # Shape: (batch, out_h, out_w, in_channels, filter_h, filter_w)
@@ -413,9 +446,9 @@ class CNNLayer(Layer):
     @classmethod
     def from_dict(cls, data: Dict) -> "CNNLayer":
         activation_name = data.get("activation_function")
-        activation_function = (
-            ACTIVATION_TYPES[activation_name]() if activation_name is not None else None
-        )
+        if activation_name is not None and activation_name not in ACTIVATION_TYPES:
+            raise ValueError(f"Unsupported activation type: {activation_name}")
+        activation_function = ACTIVATION_TYPES[activation_name]() if activation_name else None
         layer = cls(
             input_size=data["input_size"],
             output_size=data["output_size"],
@@ -506,6 +539,8 @@ class ReshapeLayer(Layer):
 
     def __init__(self, output_shape: Tuple[int, ...], name: str = None):
         super().__init__()
+        if not output_shape or any(dimension <= 0 for dimension in output_shape):
+            raise ValueError("output_shape must contain positive dimensions")
         self.name = name
         self.type = "Reshape"
         self.output_shape = output_shape
@@ -530,6 +565,8 @@ class ReshapeLayer(Layer):
         batch_size = input_data.shape[0]
 
         # Reshape to (batch_size, *output_shape)
+        if np.prod(input_data.shape[1:]) != np.prod(self.output_shape):
+            raise ValueError("ReshapeLayer output_shape does not match input features")
         output = input_data.reshape(batch_size, *self.output_shape)
 
         logger.debug(
@@ -575,6 +612,8 @@ class MaxPoolLayer(Layer):
 
     def __init__(self, pool_size: int = 2, stride: int = 2, name: str = None):
         super().__init__()
+        _require_positive_int(pool_size, "pool_size")
+        _require_positive_int(stride, "stride")
         self.name = name
         self.type = "MaxPool"
         self.pool_size = pool_size
@@ -596,6 +635,11 @@ class MaxPoolLayer(Layer):
         Returns:
             Pooled output of shape (batch, channels, out_h, out_w)
         """
+        if input_data.ndim != 4:
+            raise ValueError("MaxPoolLayer expects 4D input")
+        if input_data.shape[2] < self.pool_size or input_data.shape[3] < self.pool_size:
+            raise ValueError("MaxPoolLayer pool_size exceeds input spatial dimensions")
+
         super().forward(input_data)
         self.last_input = input_data
 
@@ -735,6 +779,7 @@ class BatchNormLayer(Layer):
         name: str = None,
     ):
         super().__init__()
+        _require_positive_int(num_features, "num_features")
         self.name = name
         self.type = "BatchNormLayer"
         self.num_features = num_features
@@ -800,6 +845,8 @@ class BatchNormLayer(Layer):
         self.last_input = input_data
         self.input_shape = input_data.shape
         batch_data = self._as_feature_matrix(input_data)
+        if batch_data.shape[1] != self.num_features:
+            raise ValueError("BatchNormLayer input feature dimension does not match num_features")
 
         if training:
             self.batch_mean = np.mean(batch_data, axis=0)

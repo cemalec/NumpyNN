@@ -5,6 +5,7 @@ from Layer import (
     Layer,
     CNNLayer,
     FlattenLayer,
+    MaxPoolLayer,
     ReshapeLayer,
     BatchNormLayer,
     EmbeddingLayer,
@@ -299,6 +300,52 @@ def test_dense_layer_serializes_gelu_activation():
     restored_layer = DenseLayer.from_dict(layer.to_dict())
 
     assert isinstance(restored_layer.activation_function, GeLU)
+
+
+def test_dense_layer_rejects_unknown_activation_type():
+    with pytest.raises(ValueError, match="Unsupported activation type"):
+        DenseLayer.from_dict(
+            {
+                "type": "Dense",
+                "name": "invalid",
+                "input_size": 2,
+                "output_size": 1,
+                "activation_function": "Unknown",
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("input_size", "output_size"), [(0, 1), (1, 0), (-1, 1)]
+)
+def test_dense_layer_validates_layer_sizes(input_size, output_size):
+    with pytest.raises(ValueError, match="positive integer"):
+        DenseLayer(input_size, output_size, ReLU())
+
+
+def test_dense_layer_validates_input_feature_dimension():
+    layer = DenseLayer(2, 1, ReLU())
+
+    with pytest.raises(ValueError, match="feature dimension"):
+        layer.forward(np.ones((3, 4)))
+
+
+def test_cnn_and_pool_validate_configuration_and_input_shapes():
+    with pytest.raises(ValueError, match="kernel_size"):
+        CNNLayer((1, 3, 3), (1, 1, 1), kernel_size=0, num_filters=1)
+    with pytest.raises(ValueError, match="pool_size"):
+        MaxPoolLayer(pool_size=0)
+
+    layer = CNNLayer((1, 3, 3), (1, 1, 1), kernel_size=3, num_filters=1)
+    with pytest.raises(ValueError, match="channel dimension"):
+        layer.forward(np.ones((1, 2, 3, 3)))
+
+
+def test_batchnorm_validates_feature_dimension():
+    layer = BatchNormLayer(num_features=2)
+
+    with pytest.raises(ValueError, match="feature dimension"):
+        layer.forward(np.ones((3, 4)))
 
 
 def test_batchnorm_layer_forward():

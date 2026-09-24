@@ -1,31 +1,53 @@
-# Numpy Neural Net
+# NumPy Neural Net
 
-This is primarily a project to demonstrate some foundational concepts of deep learning. A tremendous amount of sophistication is possible in deep learning frameworks, but this is obviously not an attempt to replicate pytorch. Classes are used to demonstrate separate concepts involved in creating a model, rather than for development and maintenance of the framework.
+This is a small, pedagogical implementation of neural-network building blocks with NumPy. It makes the data flow, gradients, parameters, and optimizer updates visible; it is not intended to reproduce a production framework such as PyTorch.
 
-## Model
+## Model And Training
 
-A model is the primary goal a deep learning. The model is able to learn from data in order to make predictions. A model is a collection of 'layers', each of which represents a set of linear and non-linear transformations. In a way, the model is the set of parameters that define the layer, but it is also the data used to train it and the optimization strategy used to arrive at those parameters through the data.
+A `Model` is an ordered sequence of layers, a differentiable loss, and an optimizer. Training performs:
+
+1. A forward pass to produce predictions.
+2. Mean loss computation.
+3. A backward pass to produce each layer's input and parameter gradients.
+4. An optimizer update for each trainable parameter.
+
+`compute_loss()` reports the mean loss. A loss derivative must therefore already include the corresponding averaging factor. For example, `CrossEntropyLoss.derivative()` returns $(y_{pred} - y_{true}) / B$ for batch size $B$. Layers accumulate parameter gradients from that upstream gradient and do not divide by the batch size again.
+
+## Differentiable Functions And Optimizers
+
+`DifferentiableFunction` represents activations and losses through a function and derivative. Metrics do not need derivatives. Optimizers receive only a layer's `parameter_gradients` and update arrays exposed by `Layer.parameters()`.
+
+Each `backward()` call returns:
+
+```python
+LayerGradients(
+	input_gradient=...,       # passed to the preceding differentiable layer
+	parameter_gradients=...,  # named gradients consumed by the optimizer
+)
+```
+
+An embedding layer returns `None` for `input_gradient` because token IDs are discrete indices rather than differentiable values.
+
+## Layer Shape Contracts
+
+Let $B$ be batch size, $F$ feature count, $C$ channels, $H$ and $W$ spatial dimensions, $L$ sequence length, and $D$ embedding dimension.
+
+| Layer | Forward input to output | Backward upstream to input gradient | Parameter gradients |
+| --- | --- | --- | --- |
+| `DenseLayer` | $(B, F) \rightarrow (B, O)$ | $(B, O) \rightarrow (B, F)$ | `weights`: $(F, O)$; `biases`: $(O)$ |
+| `CNNLayer` | $(B, C, H, W) \rightarrow (B, C_{out}, H_{out}, W_{out})$ | output shape $\rightarrow$ input shape | `weights`: $(C_{out}, C, K, K)$; `biases`: $(C_{out})$ |
+| `FlattenLayer` | $(B, \ldots) \rightarrow (B, N)$ | $(B, N) \rightarrow$ cached input shape | none |
+| `ReshapeLayer` | $(B, N) \rightarrow (B, \ldots)$ | reshaped output gradient $\rightarrow$ cached input shape | none |
+| `MaxPoolLayer` | $(B, C, H, W) \rightarrow (B, C, H_{out}, W_{out})$ | output shape $\rightarrow$ input shape | none |
+| `BatchNormLayer` | $(B, F)$ or $(B, C, H, W) \rightarrow$ same shape | same shape $\rightarrow$ same shape | `gamma`, `beta`: feature shape |
+| `EmbeddingLayer` | integer IDs $(B, L) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow \texttt{None}$ | `weights`: $(V, D)$ |
+
+`DenseLayer`, `CNNLayer`, and `BatchNormLayer` validate their declared feature boundaries. CNN, pool, reshape, and layer-size configuration values are also checked before NumPy operations can fail ambiguously.
+
+## Serialization
+
+Layer, activation, loss, and optimizer registries intentionally accept only known types. Unsupported serialized names raise `ValueError` with the relevant type, rather than a low-level dictionary error.
 
 ## Dataset
 
-An abstraction to contain the loading, splitting, and preprocessing of data.
-
-## Layer
-
-The basic unit of a neural net, each layer is a set of weights, biases, and activation functions that transform a set of inputs into outputs.
-
-## DifferentialbeFunction
-
-Differentialbe functions are used in activations and losses. Metrics are distinguished by the fact that they do not need to be differentiable.
-
-## Optimizer
-
-The optimization strategy used to update the parameters of each layer.
-
-## Training
-
-A training loop involves the 'forward pass' that results in a prediction given the models current parameters. Then the loss is calculated to quantify how far from the correct output the predictions are. Next a 'backward' pass is used to calculate the derivatives with respect to the parameters that make up the layer. The optimization strategy updates the parameters in such a way that the next prediction will hopefully be closer to the correct values. So each loop has
-- Forward pass
-- Calculate loss
-- Backward pass
-- Optimization
+`Dataset` owns loading, splitting, and preprocessing. The included MNIST dataset supplies batched inputs and labels for the training loop.

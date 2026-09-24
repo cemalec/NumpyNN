@@ -95,11 +95,23 @@ class Model:
 
     @classmethod
     def from_dict(cls, data: dict):
-        layers = [LAYER_TYPES[layer_data["type"]].from_dict(layer_data) for layer_data in data["layers"]]
-        loss = LOSS_TYPES[data["loss"]]()
-        optimizer = OPTIMIZER_TYPES[data["optimizer"]["type"]].from_dict(
-            data["optimizer"]
-        )
+        layers = []
+        for layer_data in data["layers"]:
+            layer_type = layer_data["type"]
+            if layer_type not in LAYER_TYPES:
+                raise ValueError(f"Unsupported layer type: {layer_type}")
+            layers.append(LAYER_TYPES[layer_type].from_dict(layer_data))
+
+        loss_name = data["loss"]
+        if loss_name not in LOSS_TYPES:
+            raise ValueError(f"Unsupported loss type: {loss_name}")
+        loss = LOSS_TYPES[loss_name]()
+
+        optimizer_data = data["optimizer"]
+        optimizer_name = optimizer_data["type"]
+        if optimizer_name not in OPTIMIZER_TYPES:
+            raise ValueError(f"Unsupported optimizer type: {optimizer_name}")
+        optimizer = OPTIMIZER_TYPES[optimizer_name].from_dict(optimizer_data)
         return cls(layers=layers, loss=loss, optimizer=optimizer)
 
     def save(self, filepath: str):

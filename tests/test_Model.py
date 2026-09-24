@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import pytest
 from Model import Model
 from Layer import BatchNormLayer, DenseLayer, EmbeddingLayer, LayerGradients
 from Optimizer import Optimizer, SGD
@@ -120,6 +121,28 @@ def test_model_save_and_load_preserves_embedding_weights(tmp_path):
 
     assert isinstance(restored.layers[0], EmbeddingLayer)
     np.testing.assert_array_equal(restored.layers[0].weights, embedding.weights)
+
+
+@pytest.mark.parametrize(
+    ("model_data", "message"),
+    [
+        (
+            {"layers": [{"type": "Unknown"}], "loss": "CrossEntropyLoss", "optimizer": {"type": "SGD", "learning_rate": 0.1}},
+            "Unsupported layer type",
+        ),
+        (
+            {"layers": [], "loss": "Unknown", "optimizer": {"type": "SGD", "learning_rate": 0.1}},
+            "Unsupported loss type",
+        ),
+        (
+            {"layers": [], "loss": "CrossEntropyLoss", "optimizer": {"type": "Unknown"}},
+            "Unsupported optimizer type",
+        ),
+    ],
+)
+def test_model_from_dict_rejects_unknown_registered_types(model_data, message):
+    with pytest.raises(ValueError, match=message):
+        Model.from_dict(model_data)
 
 
 if __name__ == "__main__":
