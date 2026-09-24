@@ -46,9 +46,12 @@ class Model:
             if layer.name is None:
                 layer.name = f"Layer_{self.layers.index(layer)}"
 
-    def forward(self, x: np.ndarray) -> np.ndarray:
+    def forward(self, x: np.ndarray, training: bool = True) -> np.ndarray:
         for layer in self.layers:
-            x = layer.forward(x)
+            if isinstance(layer, BatchNormLayer):
+                x = layer.forward(x, training=training)
+            else:
+                x = layer.forward(x)
         return x
 
     def backward(self, y_true: np.ndarray, y_pred: np.ndarray):
@@ -81,7 +84,7 @@ class Model:
                 self.optimizer.step(layer, grad_dict)
 
     def predict(self, x: np.ndarray) -> np.ndarray:
-        return self.forward(x)
+        return self.forward(x, training=False)
 
     def compute_loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
         return np.mean(self.loss.function(y_true, y_pred))
@@ -109,11 +112,8 @@ class Model:
 
         # Save all learnable parameters for each layer
         for i, layer in enumerate(self.layers):
-            for param_name in ["weights", "biases", "gamma", "beta"]:
-                if hasattr(layer, param_name):
-                    param = getattr(layer, param_name)
-                    if param is not None:
-                        save_dict[f"layer_{i}_{param_name}"] = param
+            for param_name, parameter in layer.parameters().items():
+                save_dict[f"layer_{i}_{param_name}"] = parameter
 
         np.savez(filepath, **save_dict)
 
@@ -131,12 +131,19 @@ class Model:
 
         # Restore all learnable parameters
         for i, layer in enumerate(model.layers):
-            for param_name in ["weights", "biases", "gamma", "beta"]:
-                key = f"layer_{i}_{param_name}"
-                if key in data and hasattr(layer, param_name):
+            parameter_prefix = f"layer_{i}_"
+            has_saved_parameters = any(
+                key.startswith(parameter_prefix) for key in data.files
+            )
+            if has_saved_parameters and not layer.parameters():
+                layer.initialize_weights()
+                layer.weights_initialized = True
+
+            for param_name in layer.parameters():
+                key = f"{parameter_prefix}{param_name}"
+                if key in data:
                     setattr(layer, param_name, data[key])
-                    if param_name in ["weights", "biases"]:
-                        layer.weights_initialized = True
+                    layer.weights_initialized = True
 
         # Load optimizer state if available
         opt_filepath = filepath.replace(".npz", "_optimizer.npz")

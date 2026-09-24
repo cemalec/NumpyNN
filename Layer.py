@@ -34,6 +34,17 @@ class Layer:
     def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
         pass
 
+    def parameters(self) -> Dict[str, np.ndarray]:
+        """Return this layer's trainable arrays by name."""
+        return {
+            name: parameter
+            for name, parameter in {
+                "weights": self.weights,
+                "biases": self.biases,
+            }.items()
+            if parameter is not None
+        }
+
     @abstractmethod
     def to_dict(self) -> Dict:
         pass
@@ -767,7 +778,14 @@ class BatchNormLayer(Layer):
         self.running_var = np.ones(self.num_features)
         logger.info(f"Batch norm parameters initialized for layer {self.name}")
 
-    def forward(self, input_data: np.ndarray) -> np.ndarray:
+    def parameters(self) -> Dict[str, np.ndarray]:
+        return {
+            name: parameter
+            for name, parameter in {"gamma": self.gamma, "beta": self.beta}.items()
+            if parameter is not None
+        }
+
+    def forward(self, input_data: np.ndarray, training: bool = True) -> np.ndarray:
         """
         Batch normalization forward pass.
 
@@ -782,25 +800,29 @@ class BatchNormLayer(Layer):
         self.input_shape = input_data.shape
         batch_data = self._as_feature_matrix(input_data)
 
-        # Compute batch statistics
-        self.batch_mean = np.mean(batch_data, axis=0)
-        self.batch_var = np.var(batch_data, axis=0)
+        if training:
+            self.batch_mean = np.mean(batch_data, axis=0)
+            self.batch_var = np.var(batch_data, axis=0)
+            mean = self.batch_mean
+            variance = self.batch_var
+        else:
+            mean = self.running_mean
+            variance = self.running_var
 
-        # Normalize
-        self.x_normalized = (batch_data - self.batch_mean) / np.sqrt(
-            self.batch_var + self.epsilon
-        )
+        self.x_normalized = (batch_data - mean) / np.sqrt(variance + self.epsilon)
 
         # Scale and shift
         output = self.gamma * self.x_normalized + self.beta
 
-        # Update running statistics
-        self.running_mean = (
-            self.momentum * self.running_mean + (1 - self.momentum) * self.batch_mean
-        )
-        self.running_var = (
-            self.momentum * self.running_var + (1 - self.momentum) * self.batch_var
-        )
+        if training:
+            self.running_mean = (
+                self.momentum * self.running_mean
+                + (1 - self.momentum) * self.batch_mean
+            )
+            self.running_var = (
+                self.momentum * self.running_var
+                + (1 - self.momentum) * self.batch_var
+            )
 
         output = self._restore_input_shape(output)
 

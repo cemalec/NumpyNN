@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from Model import Model
-from Layer import DenseLayer
+from Layer import BatchNormLayer, DenseLayer
 from Optimizer import Optimizer, SGD
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, SoftMax
 
@@ -74,6 +74,38 @@ class TestModel(unittest.TestCase):
         model.backward(targets, predictions)
 
         np.testing.assert_allclose(layer.weights, expected_weights)
+
+
+def test_predict_uses_batchnorm_running_statistics_without_updating_them():
+    batch_norm = BatchNormLayer(num_features=2, momentum=0.5, name="batch_norm")
+    model = Model([batch_norm], CrossEntropyLoss(), SGD(learning_rate=0.1))
+    model.forward(np.array([[1.0, 3.0], [5.0, 7.0]]))
+    running_mean = batch_norm.running_mean.copy()
+    running_var = batch_norm.running_var.copy()
+    inputs = np.array([[9.0, 11.0]])
+
+    predictions = model.predict(inputs)
+
+    expected = (inputs - running_mean) / np.sqrt(running_var + batch_norm.epsilon)
+    np.testing.assert_allclose(predictions, expected)
+    np.testing.assert_array_equal(batch_norm.running_mean, running_mean)
+    np.testing.assert_array_equal(batch_norm.running_var, running_var)
+
+
+def test_model_save_and_load_uses_layer_parameters(tmp_path):
+    batch_norm = BatchNormLayer(num_features=2, name="batch_norm")
+    batch_norm.gamma = np.array([2.0, 3.0])
+    batch_norm.beta = np.array([-1.0, 0.5])
+    batch_norm.weights_initialized = True
+    model = Model([batch_norm], CrossEntropyLoss(), SGD(learning_rate=0.1))
+    path = tmp_path / "batch_norm_model.npz"
+
+    model.save(str(path))
+    restored = Model.load(str(path))
+
+    assert set(batch_norm.parameters()) == {"gamma", "beta"}
+    np.testing.assert_array_equal(restored.layers[0].gamma, batch_norm.gamma)
+    np.testing.assert_array_equal(restored.layers[0].beta, batch_norm.beta)
 
 
 if __name__ == "__main__":
