@@ -11,7 +11,7 @@ A `Model` is an ordered sequence of layers, a differentiable loss, and an optimi
 3. A backward pass to produce each layer's input and parameter gradients.
 4. An optimizer update for each trainable parameter.
 
-`compute_loss()` reports the mean loss. A loss derivative must therefore already include the corresponding averaging factor. For example, `CrossEntropyLoss.derivative()` returns $(y_{pred} - y_{true}) / B$ for batch size $B$. Layers accumulate parameter gradients from that upstream gradient and do not divide by the batch size again.
+`compute_loss()` reports the mean loss. A loss derivative must therefore already include the corresponding averaging factor. `CrossEntropyLoss.derivative()` returns $(y_{pred} - y_{true}) / N$, where $N$ is the product of every axis before the final class axis. For sequence predictions, $N = B \times L$. Layers accumulate parameter gradients from that upstream gradient and do not divide again.
 
 ## Differentiable Functions And Optimizers
 
@@ -45,6 +45,7 @@ Let $B$ be batch size, $F$ feature count, $C$ channels, $H$ and $W$ spatial dime
 | `PositionalEncodingLayer` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | none |
 | `DotProductAttentionLayer` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | `query_weights`, `key_weights`, `value_weights`, `output_weights`: $(D, D)$ |
 | `TransformerBlock` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | attention, two LayerNorms, and two Dense layers |
+| `VocabularyProjectionLayer` | $(B, L, D) \rightarrow (B, L, V)$ probabilities | $(B, L, V) \rightarrow (B, L, D)$ | `weights`: $(D, V)$; `biases`: $(V)$ |
 
 ## Transformer Block
 
@@ -63,6 +64,8 @@ flowchart LR
 ```
 
 The block keeps both residual additions explicit. During backward propagation, each addition sends its upstream gradient down both branches, and the two input gradients are added.
+
+`configs/transformer_encoder.yaml` is an encoder example. `configs/transformer_decoder.yaml` adds vocabulary projection for token probabilities, but is decoder-style only: it does not apply a causal mask.
 
 `DenseLayer`, `CNNLayer`, and `BatchNormLayer` validate their declared feature boundaries. CNN, pool, reshape, and layer-size configuration values are also checked before NumPy operations can fail ambiguously.
 
