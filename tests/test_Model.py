@@ -2,8 +2,8 @@ import unittest
 import numpy as np
 from Model import Model
 from Layer import DenseLayer
-from Optimizer import Optimizer
-from DifferentiableFunction import DifferentiableFunction
+from Optimizer import Optimizer, SGD
+from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, SoftMax
 
 
 dummy_loss = DifferentiableFunction(
@@ -57,6 +57,23 @@ class TestModel(unittest.TestCase):
         self.model.backward(self.y_true, y_pred)
         for layer in self.layers:
             self.assertTrue(hasattr(layer, "inputs"))
+
+    def test_softmax_cross_entropy_uses_logit_gradient(self):
+        layer = DenseLayer(2, 2, SoftMax(), name="output")
+        layer.weights = np.array([[0.3, -0.2], [0.1, 0.4]])
+        layer.biases = np.array([0.05, -0.05])
+        layer.weights_initialized = True
+        model = Model([layer], CrossEntropyLoss(), SGD(learning_rate=0.1))
+        inputs = np.array([[0.2, -0.1], [0.4, 0.3]])
+        targets = np.array([[0.0, 1.0], [1.0, 0.0]])
+
+        predictions = model.forward(inputs)
+        expected_gradient = inputs.T @ ((predictions - targets) / len(inputs))
+        expected_weights = layer.weights - 0.1 * expected_gradient
+
+        model.backward(targets, predictions)
+
+        np.testing.assert_allclose(layer.weights, expected_weights)
 
 
 if __name__ == "__main__":

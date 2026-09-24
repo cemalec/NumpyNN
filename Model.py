@@ -1,8 +1,31 @@
 from typing import List
 import numpy as np
-from Layer import DenseLayer
-from DifferentiableFunction import DifferentiableFunction
-from Optimizer import Optimizer
+from Layer import (
+    BatchNormLayer,
+    CNNLayer,
+    DenseLayer,
+    FlattenLayer,
+    MaxPoolLayer,
+    ReshapeLayer,
+)
+from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, ReLU, Sigmoid, SoftMax
+from Optimizer import Adam, Optimizer, RMSProp, SGD
+
+LAYER_TYPES = {
+    "Dense": DenseLayer,
+    "DenseLayer": DenseLayer,
+    "CNN": CNNLayer,
+    "CNNLayer": CNNLayer,
+    "Flatten": FlattenLayer,
+    "FlattenLayer": FlattenLayer,
+    "Reshape": ReshapeLayer,
+    "ReshapeLayer": ReshapeLayer,
+    "MaxPool": MaxPoolLayer,
+    "MaxPoolLayer": MaxPoolLayer,
+    "BatchNormLayer": BatchNormLayer,
+}
+LOSS_TYPES = {"CrossEntropyLoss": CrossEntropyLoss}
+OPTIMIZER_TYPES = {"SGD": SGD, "RMSProp": RMSProp, "Adam": Adam}
 
 
 class Model:
@@ -31,8 +54,21 @@ class Model:
     def backward(self, y_true: np.ndarray, y_pred: np.ndarray):
         loss_grad = self.loss.derivative(y_true, y_pred)
         grad_dict = {"inputs": loss_grad}
-        for layer in reversed(self.layers):
-            grad_dict = layer.backward(grad_dict["inputs"])
+        last_layer_index = len(self.layers) - 1
+        uses_fused_softmax_cross_entropy = (
+            isinstance(self.loss, CrossEntropyLoss)
+            and isinstance(self.layers[-1], DenseLayer)
+            and isinstance(self.layers[-1].activation_function, SoftMax)
+        )
+
+        for layer_index in range(last_layer_index, -1, -1):
+            layer = self.layers[layer_index]
+            if layer_index == last_layer_index and uses_fused_softmax_cross_entropy:
+                grad_dict = layer.backward(
+                    grad_dict["inputs"], apply_activation_derivative=False
+                )
+            else:
+                grad_dict = layer.backward(grad_dict["inputs"])
 
             # Check if any gradient exists for layer parameters (excluding 'inputs')
             has_learnable_params = any(
@@ -59,14 +95,11 @@ class Model:
 
     @classmethod
     def from_dict(cls, data: dict):
-        layers = [
-            getattr(__import__("Layer"), layer_data["type"]).from_dict(layer_data)
-            for layer_data in data["layers"]
-        ]
-        loss = getattr(__import__("DifferentiableFunction"), data["loss"])()
-        optimizer = getattr(
-            __import__("Optimizer"), data["optimizer"]["type"]
-        ).from_dict(data["optimizer"])
+        layers = [LAYER_TYPES[layer_data["type"]].from_dict(layer_data) for layer_data in data["layers"]]
+        loss = LOSS_TYPES[data["loss"]]()
+        optimizer = OPTIMIZER_TYPES[data["optimizer"]["type"]].from_dict(
+            data["optimizer"]
+        )
         return cls(layers=layers, loss=loss, optimizer=optimizer)
 
     def save(self, filepath: str):
