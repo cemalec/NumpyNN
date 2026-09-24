@@ -68,6 +68,12 @@ class DotProductAttentionLayerConfig(BaseModel):
     name: str = None
 
 
+class PositionalEncodingLayerConfig(BaseModel):
+    type: str = "PositionalEncodingLayer"
+    embedding_dim: int
+    name: str = None
+
+
 LayerConfigType: TypeAlias = (
     LayerConfig
     | CNNLayerConfig
@@ -76,6 +82,7 @@ LayerConfigType: TypeAlias = (
     | MaxPoolLayerConfig
     | BatchNormLayerConfig
     | DotProductAttentionLayerConfig
+    | PositionalEncodingLayerConfig
 )
 
 
@@ -101,6 +108,8 @@ def get_layer_model(layer_type: str):
         return BatchNormLayerConfig
     elif layer_type == "DotProductAttentionLayer":
         return DotProductAttentionLayerConfig
+    elif layer_type == "PositionalEncodingLayer":
+        return PositionalEncodingLayerConfig
     else:
         raise ValueError(f"Unsupported layer type: {layer_type}")
 

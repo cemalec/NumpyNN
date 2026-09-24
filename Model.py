@@ -9,6 +9,7 @@ from Layer import (
     FlattenLayer,
     LayerGradients,
     MaxPoolLayer,
+    PositionalEncodingLayer,
     ReshapeLayer,
 )
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, ReLU, Sigmoid, SoftMax
@@ -27,6 +28,7 @@ LAYER_TYPES = {
     "MaxPoolLayer": MaxPoolLayer,
     "BatchNormLayer": BatchNormLayer,
     "EmbeddingLayer": EmbeddingLayer,
+    "PositionalEncodingLayer": PositionalEncodingLayer,
     "DotProductAttentionLayer": DotProductAttentionLayer,
 }
 LOSS_TYPES = {"CrossEntropyLoss": CrossEntropyLoss}

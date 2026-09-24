@@ -7,6 +7,7 @@ from Layer import (
     FlattenLayer,
     MaxPoolLayer,
     DotProductAttentionLayer,
+    PositionalEncodingLayer,
     ReshapeLayer,
     BatchNormLayer,
     EmbeddingLayer,
@@ -630,6 +631,41 @@ def test_attention_forward_shape_and_attention_rows():
         "value_weights",
         "output_weights",
     }
+
+
+def test_positional_encoding_distinguishes_identical_tokens_by_position():
+    layer = PositionalEncodingLayer(embedding_dim=4)
+    inputs = np.zeros((1, 3, 4))
+
+    output = layer.forward(inputs)
+
+    np.testing.assert_allclose(output[0, 0], np.array([0.0, 1.0, 0.0, 1.0]))
+    assert not np.allclose(output[0, 0], output[0, 1])
+    assert layer.parameters() == {}
+
+
+def test_positional_encoding_backward_is_identity():
+    layer = PositionalEncodingLayer(embedding_dim=2)
+    layer.forward(np.ones((1, 2, 2)))
+    output_gradient = np.array([[[0.2, -0.1], [0.4, 0.3]]])
+
+    gradients = layer.backward(output_gradient)
+
+    np.testing.assert_array_equal(gradients.input_gradient, output_gradient)
+    assert gradients.parameter_gradients == {}
+
+
+@pytest.mark.parametrize(
+    "inputs, message",
+    [
+        (np.ones((1, 2)), "3D"),
+        (np.ones((1, 2, 2), dtype=int), "floating-point"),
+        (np.ones((1, 2, 3)), "feature dimension"),
+    ],
+)
+def test_positional_encoding_validates_input_contract(inputs, message):
+    with pytest.raises(ValueError, match=message):
+        PositionalEncodingLayer(embedding_dim=2).forward(inputs)
 
 
 def test_attention_is_permutation_equivariant_without_positions():

@@ -8,6 +8,7 @@ from Layer import (
     DotProductAttentionLayer,
     EmbeddingLayer,
     LayerGradients,
+    PositionalEncodingLayer,
 )
 from Optimizer import Optimizer, SGD
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, SoftMax
@@ -166,6 +167,18 @@ def test_model_backward_updates_attention_parameters():
 
     for name, original_parameter in original_parameters.items():
         assert not np.array_equal(getattr(attention, name), original_parameter)
+
+
+def test_model_save_and_load_preserves_positional_encoding_config(tmp_path):
+    positions = PositionalEncodingLayer(embedding_dim=3, name="positions")
+    model = Model([positions], CrossEntropyLoss(), SGD(learning_rate=0.1))
+    path = tmp_path / "positions_model.npz"
+
+    model.save(str(path))
+    restored = Model.load(str(path))
+
+    assert isinstance(restored.layers[0], PositionalEncodingLayer)
+    assert restored.layers[0].embedding_dim == 3
 
 
 @pytest.mark.parametrize(

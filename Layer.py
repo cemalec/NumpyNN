@@ -995,6 +995,64 @@ class EmbeddingLayer(Layer):
         )
 
 
+class PositionalEncodingLayer(Layer):
+    """Add fixed sinusoidal position information to sequence vectors."""
+
+    def __init__(self, embedding_dim: int, name: str = None):
+        super().__init__()
+        _require_positive_int(embedding_dim, "embedding_dim")
+        self.name = name
+        self.type = "PositionalEncodingLayer"
+        self.embedding_dim = embedding_dim
+        self.encoding = None
+
+    def initialize_weights(self):
+        """Positional encodings are fixed and have no trainable arrays."""
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        if input_data.ndim != 3:
+            raise ValueError("PositionalEncodingLayer expects 3D input")
+        if not np.issubdtype(input_data.dtype, np.floating):
+            raise ValueError("PositionalEncodingLayer expects floating-point input")
+        if input_data.shape[-1] != self.embedding_dim:
+            raise ValueError(
+                "PositionalEncodingLayer input feature dimension does not match embedding_dim"
+            )
+
+        super().forward(input_data)
+        self.last_input = input_data
+        sequence_length = input_data.shape[1]
+        positions = np.arange(sequence_length)[:, np.newaxis]
+        frequencies = np.exp(
+            np.arange(0, self.embedding_dim, 2) * -np.log(10000.0) / self.embedding_dim
+        )
+        self.encoding = np.zeros((sequence_length, self.embedding_dim))
+        self.encoding[:, 0::2] = np.sin(positions * frequencies)
+        self.encoding[:, 1::2] = np.cos(
+            positions * frequencies[: self.encoding[:, 1::2].shape[1]]
+        )
+        return input_data + self.encoding[np.newaxis, :, :]
+
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
+        if output_gradient.shape != self.last_input.shape:
+            raise ValueError("PositionalEncodingLayer gradient has the wrong shape")
+        return LayerGradients(input_gradient=output_gradient, parameter_gradients={})
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "embedding_dim": self.embedding_dim,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "PositionalEncodingLayer":
+        return cls(
+            embedding_dim=data["embedding_dim"],
+            name=data.get("name"),
+        )
+
+
 class DotProductAttentionLayer(Layer):
     """Single-head self-attention without positional or causal masking."""
 

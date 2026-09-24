@@ -41,6 +41,7 @@ Let $B$ be batch size, $F$ feature count, $C$ channels, $H$ and $W$ spatial dime
 | `MaxPoolLayer` | $(B, C, H, W) \rightarrow (B, C, H_{out}, W_{out})$ | output shape $\rightarrow$ input shape | none |
 | `BatchNormLayer` | $(B, F)$ or $(B, C, H, W) \rightarrow$ same shape | same shape $\rightarrow$ same shape | `gamma`, `beta`: feature shape |
 | `EmbeddingLayer` | integer IDs $(B, L) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow \texttt{None}$ | `weights`: $(V, D)$ |
+| `PositionalEncodingLayer` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | none |
 | `DotProductAttentionLayer` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | `query_weights`, `key_weights`, `value_weights`, `output_weights`: $(D, D)$ |
 
 `DenseLayer`, `CNNLayer`, and `BatchNormLayer` validate their declared feature boundaries. CNN, pool, reshape, and layer-size configuration values are also checked before NumPy operations can fail ambiguously.

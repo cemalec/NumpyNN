@@ -88,3 +88,23 @@ optimizer:
 
     assert model.layers[0].type == "DotProductAttentionLayer"
     assert model.layers[0].embedding_dim == 4
+
+
+def test_hydrate_yaml_creates_positional_encoding_layer(tmp_path: Path):
+    yaml_content = """
+layers:
+  - type: PositionalEncodingLayer
+    name: positions
+    embedding_dim: 4
+loss: CrossEntropyLoss
+optimizer:
+  type: SGD
+  learning_rate: 0.1
+"""
+    cfg_path = tmp_path / "positions_config.yaml"
+    _write_yaml(cfg_path, yaml_content)
+
+    model = hydrate_model(str(cfg_path))
+
+    assert model.layers[0].type == "PositionalEncodingLayer"
+    assert model.layers[0].embedding_dim == 4
