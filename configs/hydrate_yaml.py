@@ -74,6 +74,13 @@ class PositionalEncodingLayerConfig(BaseModel):
     name: str = None
 
 
+class LayerNormLayerConfig(BaseModel):
+    type: str = "LayerNormLayer"
+    num_features: int
+    epsilon: float = 1e-5
+    name: str = None
+
+
 LayerConfigType: TypeAlias = (
     LayerConfig
     | CNNLayerConfig
@@ -83,6 +90,7 @@ LayerConfigType: TypeAlias = (
     | BatchNormLayerConfig
     | DotProductAttentionLayerConfig
     | PositionalEncodingLayerConfig
+    | LayerNormLayerConfig
 )
 
 
@@ -110,6 +118,8 @@ def get_layer_model(layer_type: str):
         return DotProductAttentionLayerConfig
     elif layer_type == "PositionalEncodingLayer":
         return PositionalEncodingLayerConfig
+    elif layer_type == "LayerNormLayer":
+        return LayerNormLayerConfig
     else:
         raise ValueError(f"Unsupported layer type: {layer_type}")
 

@@ -8,6 +8,7 @@ from Layer import (
     DotProductAttentionLayer,
     EmbeddingLayer,
     LayerGradients,
+    LayerNormLayer,
     PositionalEncodingLayer,
 )
 from Optimizer import Optimizer, SGD
@@ -179,6 +180,22 @@ def test_model_save_and_load_preserves_positional_encoding_config(tmp_path):
 
     assert isinstance(restored.layers[0], PositionalEncodingLayer)
     assert restored.layers[0].embedding_dim == 3
+
+
+def test_model_save_and_load_preserves_layernorm_parameters(tmp_path):
+    layer_norm = LayerNormLayer(num_features=2, name="layer_norm")
+    layer_norm.gamma = np.array([1.2, 0.8])
+    layer_norm.beta = np.array([-0.1, 0.3])
+    layer_norm.weights_initialized = True
+    model = Model([layer_norm], CrossEntropyLoss(), SGD(learning_rate=0.1))
+    path = tmp_path / "layer_norm_model.npz"
+
+    model.save(str(path))
+    restored = Model.load(str(path))
+
+    assert isinstance(restored.layers[0], LayerNormLayer)
+    np.testing.assert_array_equal(restored.layers[0].gamma, layer_norm.gamma)
+    np.testing.assert_array_equal(restored.layers[0].beta, layer_norm.beta)
 
 
 @pytest.mark.parametrize(

@@ -11,6 +11,7 @@ from Layer import (
     ReshapeLayer,
     BatchNormLayer,
     EmbeddingLayer,
+    LayerNormLayer,
 )
 from DifferentiableFunction import GeLU, ReLU
 
@@ -85,6 +86,25 @@ def test_backward_with_multiple_samples():
     layer = optimizer.update(layer, expected_weights_gradient, expected_biases_gradient)
     np.testing.assert_allclose(layer.weights, new_weights)
     np.testing.assert_allclose(layer.biases, new_biases)
+
+
+def test_dense_layer_applies_its_map_to_each_sequence_position():
+    layer = DenseLayer(2, 2, DummyActivation())
+    layer.weights = np.array([[1.0, 2.0], [3.0, 4.0]])
+    layer.biases = np.array([0.5, -0.5])
+    layer.weights_initialized = True
+    inputs = np.array([[[1.0, 0.0], [0.0, 1.0]]])
+
+    output = layer.forward(inputs)
+    gradients = layer.backward(np.ones_like(output))
+
+    np.testing.assert_allclose(
+        output, np.array([[[1.5, 1.5], [3.5, 3.5]]])
+    )
+    np.testing.assert_allclose(
+        gradients.parameter_gradients["weights"], np.array([[1.0, 1.0], [1.0, 1.0]])
+    )
+    np.testing.assert_allclose(gradients.input_gradient.shape, inputs.shape)
 
 
 def test_cnn_layer_forward():
@@ -556,6 +576,75 @@ def test_batchnorm_to_dict_and_from_dict():
     assert restored_layer.num_features == layer.num_features
     assert restored_layer.momentum == layer.momentum
     assert restored_layer.epsilon == layer.epsilon
+
+
+def test_layernorm_normalizes_each_sequence_position():
+    layer = LayerNormLayer(num_features=3)
+    inputs = np.array([[[1.0, 3.0, 5.0], [2.0, 4.0, 8.0]]])
+
+    output = layer.forward(inputs)
+
+    np.testing.assert_allclose(np.mean(output, axis=-1), 0.0, atol=1e-7)
+    np.testing.assert_allclose(
+        output,
+        (inputs - np.mean(inputs, axis=-1, keepdims=True))
+        / np.sqrt(np.var(inputs, axis=-1, keepdims=True) + layer.epsilon),
+    )
+
+
+def test_layernorm_backward_matches_finite_differences():
+    layer = LayerNormLayer(num_features=2)
+    layer.gamma = np.array([1.2, -0.7])
+    layer.beta = np.array([0.3, -0.2])
+    layer.weights_initialized = True
+    inputs = np.array([[[0.2, -0.4], [0.7, 0.3]]])
+    output_gradient = np.array([[[0.5, -0.2], [-0.3, 0.4]]])
+    layer.forward(inputs)
+    gradients = layer.backward(output_gradient)
+    epsilon = 1e-6
+
+    def loss() -> float:
+        return np.sum(layer.forward(inputs) * output_gradient)
+
+    for parameter_name, index in {"gamma": 1, "beta": 0}.items():
+        parameter = getattr(layer, parameter_name)
+        original_value = parameter[index]
+        parameter[index] = original_value + epsilon
+        positive_loss = loss()
+        parameter[index] = original_value - epsilon
+        negative_loss = loss()
+        parameter[index] = original_value
+        numerical_gradient = (positive_loss - negative_loss) / (2 * epsilon)
+        np.testing.assert_allclose(
+            gradients.parameter_gradients[parameter_name][index],
+            numerical_gradient,
+            rtol=1e-5,
+            atol=1e-6,
+        )
+
+    input_index = (0, 1, 0)
+    original_input = inputs[input_index]
+    inputs[input_index] = original_input + epsilon
+    positive_loss = loss()
+    inputs[input_index] = original_input - epsilon
+    negative_loss = loss()
+    inputs[input_index] = original_input
+    numerical_gradient = (positive_loss - negative_loss) / (2 * epsilon)
+    np.testing.assert_allclose(
+        gradients.input_gradient[input_index],
+        numerical_gradient,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+
+
+def test_layernorm_validates_input_contract():
+    layer = LayerNormLayer(num_features=2)
+
+    with pytest.raises(ValueError, match="at least 2D"):
+        layer.forward(np.ones(2))
+    with pytest.raises(ValueError, match="feature dimension"):
+        layer.forward(np.ones((1, 2, 3)))
 
 
 def test_embedding_layer_looks_up_token_vectors():

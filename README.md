@@ -40,6 +40,7 @@ Let $B$ be batch size, $F$ feature count, $C$ channels, $H$ and $W$ spatial dime
 | `ReshapeLayer` | $(B, N) \rightarrow (B, \ldots)$ | reshaped output gradient $\rightarrow$ cached input shape | none |
 | `MaxPoolLayer` | $(B, C, H, W) \rightarrow (B, C, H_{out}, W_{out})$ | output shape $\rightarrow$ input shape | none |
 | `BatchNormLayer` | $(B, F)$ or $(B, C, H, W) \rightarrow$ same shape | same shape $\rightarrow$ same shape | `gamma`, `beta`: feature shape |
+| `LayerNormLayer` | $(\ldots, F) \rightarrow (\ldots, F)$ | same shape $\rightarrow$ same shape | `gamma`, `beta`: $(F)$ |
 | `EmbeddingLayer` | integer IDs $(B, L) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow \texttt{None}$ | `weights`: $(V, D)$ |
 | `PositionalEncodingLayer` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | none |
 | `DotProductAttentionLayer` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | `query_weights`, `key_weights`, `value_weights`, `output_weights`: $(D, D)$ |

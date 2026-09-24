@@ -117,16 +117,14 @@ class DenseLayer(Layer):
         Returns:
             np.ndarray: Output after applying weights, biases, and activation function. Shape: (batch_size, output_size)
         """
-        if input_data.ndim != 2:
-            raise ValueError("DenseLayer expects 2D input")
-        if input_data.shape[1] != self.input_size:
+        if input_data.ndim < 2:
+            raise ValueError("DenseLayer expects at least 2D input")
+        if input_data.shape[-1] != self.input_size:
             raise ValueError("DenseLayer input feature dimension does not match input_size")
 
         super().forward(input_data)
         self.last_input = input_data
-        self.last_z = (
-            np.dot(input_data, self.weights) + self.biases
-        )  # (batch_size, output_size)
+        self.last_z = input_data @ self.weights + self.biases
         logger.debug(
             f"Forward pass in layer {self.name}: input shape {input_data.shape}, z shape {self.last_z.shape}"
         )
@@ -151,17 +149,12 @@ class DenseLayer(Layer):
         )
         # The gradient of the loss with respect to the scores
         dL_dz = dL_da * da_dz  # (batch_size, output_size)
-        # The gradient of the scores with respect to weights, biases, and inputs
-        dz_dW = self.last_input  # (batch_size, input_size)
-        dz_db = 1  # Bias gradient is summed over batch
-        dz_di = self.weights  # (input_size, output_size)
-
-        # The gradent of the loss with respect to *this* layer's weights, biases, and inputs
-        weight_gradient = np.dot(dz_dW.T, dL_dz)
-        bias_gradient = np.sum(dL_dz * dz_db, axis=0)
-        input_gradient = np.dot(
-            dL_dz, dz_di.T
-        )  # (batch_size, input_size), passed to previous layer
+        # Flatten batch-like dimensions while preserving the final feature axis.
+        input_matrix = self.last_input.reshape(-1, self.input_size)
+        score_gradient_matrix = dL_dz.reshape(-1, self.output_size)
+        weight_gradient = input_matrix.T @ score_gradient_matrix
+        bias_gradient = np.sum(score_gradient_matrix, axis=0)
+        input_gradient = dL_dz @ self.weights.T
 
         logger.debug(
             f"Backward pass in layer {self.name}: output_gradient shape {dL_da.shape}, input_gradient shape {input_gradient.shape}"
@@ -930,6 +923,88 @@ class BatchNormLayer(Layer):
         return cls(
             num_features=data["num_features"],
             momentum=data.get("momentum", 0.9),
+            epsilon=data.get("epsilon", 1e-5),
+            name=data.get("name"),
+        )
+
+
+class LayerNormLayer(Layer):
+    """Normalize each input independently across its final feature axis."""
+
+    def __init__(self, num_features: int, epsilon: float = 1e-5, name: str = None):
+        super().__init__()
+        _require_positive_int(num_features, "num_features")
+        if epsilon <= 0:
+            raise ValueError("epsilon must be positive")
+        self.name = name
+        self.type = "LayerNormLayer"
+        self.num_features = num_features
+        self.epsilon = epsilon
+        self.gamma = None
+        self.beta = None
+        self.x_normalized = None
+        self.inverse_std = None
+
+    def initialize_weights(self):
+        self.gamma = np.ones(self.num_features)
+        self.beta = np.zeros(self.num_features)
+
+    def parameters(self) -> Dict[str, np.ndarray]:
+        return {
+            name: parameter
+            for name, parameter in {"gamma": self.gamma, "beta": self.beta}.items()
+            if parameter is not None
+        }
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        if input_data.ndim < 2:
+            raise ValueError("LayerNormLayer expects at least 2D input")
+        if input_data.shape[-1] != self.num_features:
+            raise ValueError(
+                "LayerNormLayer input feature dimension does not match num_features"
+            )
+
+        super().forward(input_data)
+        self.last_input = input_data
+        mean = np.mean(input_data, axis=-1, keepdims=True)
+        variance = np.var(input_data, axis=-1, keepdims=True)
+        self.inverse_std = 1 / np.sqrt(variance + self.epsilon)
+        self.x_normalized = (input_data - mean) * self.inverse_std
+        return self.gamma * self.x_normalized + self.beta
+
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
+        if output_gradient.shape != self.last_input.shape:
+            raise ValueError("LayerNormLayer gradient has the wrong shape")
+
+        parameter_axes = tuple(range(output_gradient.ndim - 1))
+        gamma_gradient = np.sum(output_gradient * self.x_normalized, axis=parameter_axes)
+        beta_gradient = np.sum(output_gradient, axis=parameter_axes)
+        normalized_gradient = output_gradient * self.gamma
+        input_gradient = self.inverse_std * (
+            normalized_gradient
+            - np.mean(normalized_gradient, axis=-1, keepdims=True)
+            - self.x_normalized
+            * np.mean(
+                normalized_gradient * self.x_normalized, axis=-1, keepdims=True
+            )
+        )
+        return LayerGradients(
+            input_gradient=input_gradient,
+            parameter_gradients={"gamma": gamma_gradient, "beta": beta_gradient},
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "num_features": self.num_features,
+            "epsilon": self.epsilon,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "LayerNormLayer":
+        return cls(
+            num_features=data["num_features"],
             epsilon=data.get("epsilon", 1e-5),
             name=data.get("name"),
         )
