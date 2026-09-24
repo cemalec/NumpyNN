@@ -1,0 +1,3 @@
+This is a primarily pedagogical repo, making it simple to view the basic building blocks of neural nets and how they are constructed. Strive for correctness, conciseness, and elegance, but maintain abstractions at the level found in the usual explanations of machine learning systems.
+
+Layer, Model, Optimizer, Embedding, etc, the point of this repo is to understand these concepts, not efficiently train and back-propagate a real model.
