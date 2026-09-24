@@ -1,11 +1,13 @@
 from typing import Tuple, List
 import numpy as np
-from DifferentiableFunction import DifferentiableFunction
+from DifferentiableFunction import DifferentiableFunction, ReLU, Sigmoid, SoftMax
 from typing import Dict
 from abc import abstractmethod
 import logging
 
 logger = logging.getLogger(__name__)
+
+ACTIVATION_TYPES = {activation.__name__: activation for activation in (ReLU, Sigmoid, SoftMax)}
 
 
 class Layer:
@@ -96,7 +98,9 @@ class DenseLayer(Layer):
         )
         return self.activation_function.function(self.last_z)
 
-    def backward(self, dL_da: np.ndarray) -> Dict[str, np.ndarray]:
+    def backward(
+        self, dL_da: np.ndarray, apply_activation_derivative: bool = True
+    ) -> Dict[str, np.ndarray]:
         """
         Performs the backward pass through the layer, updating weights and biases.
         Parameters:
@@ -105,11 +109,12 @@ class DenseLayer(Layer):
         Returns:
             np.ndarray: Gradient of the loss with respect to the layer's input. Shape: (batch_size, input_size)
         """
-        batches = self.last_input.shape[0]
         # The gradient of the activation function with respect to the scores (last_z)
-        da_dz = self.activation_function.derivative(
-            self.last_z
-        )  # (batch_size, output_size)
+        da_dz = (
+            self.activation_function.derivative(self.last_z)
+            if apply_activation_derivative
+            else 1
+        )
         # The gradient of the loss with respect to the scores
         dL_dz = dL_da * da_dz  # (batch_size, output_size)
         # The gradient of the scores with respect to weights, biases, and inputs
@@ -118,12 +123,8 @@ class DenseLayer(Layer):
         dz_di = self.weights  # (input_size, output_size)
 
         # The gradent of the loss with respect to *this* layer's weights, biases, and inputs
-        weight_gradient = (
-            np.dot(dz_dW.T, dL_dz) / batches
-        )  # (input_size, output_size), used for weight update
-        bias_gradient = (
-            np.sum(dL_dz * dz_db, axis=0) / batches
-        )  # (output_size,), used for bias update
+        weight_gradient = np.dot(dz_dW.T, dL_dz)
+        bias_gradient = np.sum(dL_dz * dz_db, axis=0)
         input_gradient = np.dot(
             dL_dz, dz_di.T
         )  # (batch_size, input_size), passed to previous layer
@@ -152,9 +153,7 @@ class DenseLayer(Layer):
 
     @classmethod
     def from_dict(cls, data: Dict) -> "DenseLayer":
-        activation_function = getattr(
-            __import__("DifferentiableFunction"), data["activation_function"]
-        )()
+        activation_function = ACTIVATION_TYPES[data["activation_function"]]()
         layer = cls(
             input_size=data["input_size"],
             output_size=data["output_size"],
@@ -173,6 +172,7 @@ class CNNLayer(Layer):
         num_filters: int,
         padding: int = 0,
         stride: int = 1,
+        activation_function: DifferentiableFunction = None,
         name: str = None,
     ):
         super().__init__()
@@ -184,6 +184,7 @@ class CNNLayer(Layer):
         self.num_filters = num_filters
         self.padding = padding
         self.stride = stride
+        self.activation_function = activation_function
 
     def initialize_weights(self):
         # Need in_channels - extract from input_size or add as parameter
@@ -205,9 +206,9 @@ class CNNLayer(Layer):
                 input_data,
                 (
                     (0, 0),
-                    (self.padding, self.padding),
-                    (self.padding, self.padding),
                     (0, 0),
+                    (self.padding, self.padding),
+                    (self.padding, self.padding),
                 ),
                 mode="constant",
             )
@@ -255,11 +256,13 @@ class CNNLayer(Layer):
         )
 
         # Add biases and transpose to (batch, num_filters, out_h, out_w)
-        output = output + self.biases
-        output = np.transpose(output, (0, 3, 1, 2))
+        output = np.transpose(output + self.biases, (0, 3, 1, 2))
 
         self.last_input = input_data
-        return output
+        self.last_z = output
+        if self.activation_function is None:
+            return output
+        return self.activation_function.function(output)
 
     def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
         """
@@ -273,6 +276,11 @@ class CNNLayer(Layer):
         """
         batch_size, num_filters, output_height, output_width = output_gradient.shape
         _, in_channels, padded_height, padded_width = self.last_input.shape
+
+        if self.activation_function is not None:
+            output_gradient = output_gradient * self.activation_function.derivative(
+                self.last_z
+            )
 
         # Bias gradient: sum over batch, height, and width
         bias_gradient = np.sum(output_gradient, axis=(0, 2, 3))
@@ -305,7 +313,7 @@ class CNNLayer(Layer):
         # Weight gradient: (num_filters, in_ch, fh, fw)
         # dL_dout: (batch, out_h, out_w, num_filters)
         # windows: (batch, out_h, out_w, in_ch, fh, fw)
-        weight_gradient = np.einsum("bhwf,bhwcij->fcij", dL_dout, windows) / batch_size
+        weight_gradient = np.einsum("bhwf,bhwcij->fcij", dL_dout, windows)
 
         # Input gradient - need to do "full" convolution
         # Rotate filters 180 degrees for convolution
@@ -371,10 +379,19 @@ class CNNLayer(Layer):
             "num_filters": self.num_filters,
             "padding": self.padding,
             "stride": self.stride,
+            "activation_function": (
+                self.activation_function.__class__.__name__
+                if self.activation_function is not None
+                else None
+            ),
         }
 
     @classmethod
     def from_dict(cls, data: Dict) -> "CNNLayer":
+        activation_name = data.get("activation_function")
+        activation_function = (
+            ACTIVATION_TYPES[activation_name]() if activation_name is not None else None
+        )
         layer = cls(
             input_size=data["input_size"],
             output_size=data["output_size"],
@@ -382,6 +399,7 @@ class CNNLayer(Layer):
             num_filters=data["num_filters"],
             padding=data.get("padding", 0),
             stride=data.get("stride", 1),
+            activation_function=activation_function,
             name=data.get("name"),
         )
         return layer
@@ -723,6 +741,23 @@ class BatchNormLayer(Layer):
         self.x_normalized = None
         self.batch_mean = None
         self.batch_var = None
+        self.input_shape = None
+
+    @staticmethod
+    def _as_feature_matrix(input_data: np.ndarray) -> np.ndarray:
+        if input_data.ndim == 2:
+            return input_data
+        if input_data.ndim == 4:
+            return input_data.transpose(0, 2, 3, 1).reshape(-1, input_data.shape[1])
+        raise ValueError("BatchNormLayer expects 2D or 4D input")
+
+    def _restore_input_shape(self, feature_matrix: np.ndarray) -> np.ndarray:
+        if len(self.input_shape) == 2:
+            return feature_matrix
+        batch_size, channels, height, width = self.input_shape
+        return feature_matrix.reshape(batch_size, height, width, channels).transpose(
+            0, 3, 1, 2
+        )
 
     def initialize_weights(self):
         """Initialize gamma=1, beta=0, and running statistics."""
@@ -744,16 +779,8 @@ class BatchNormLayer(Layer):
         """
         super().forward(input_data)
         self.last_input = input_data
-
-        # Reshape to (batch, features) for computation
-        original_shape = input_data.shape
-        if len(input_data.shape) == 4:  # (batch, channels, height, width)
-            batch_data = input_data.reshape(
-                input_data.shape[0], input_data.shape[1], -1
-            )
-            batch_data = batch_data.transpose(0, 2, 1).reshape(-1, input_data.shape[1])
-        else:
-            batch_data = input_data
+        self.input_shape = input_data.shape
+        batch_data = self._as_feature_matrix(input_data)
 
         # Compute batch statistics
         self.batch_mean = np.mean(batch_data, axis=0)
@@ -775,13 +802,7 @@ class BatchNormLayer(Layer):
             self.momentum * self.running_var + (1 - self.momentum) * self.batch_var
         )
 
-        # Reshape back to original shape
-        if len(original_shape) == 4:
-            output = output.reshape(
-                -1, original_shape[1], original_shape[2], original_shape[3]
-            )
-        else:
-            output = output.reshape(original_shape)
+        output = self._restore_input_shape(output)
 
         logger.debug(
             f"BatchNorm layer {self.name}: input shape {input_data.shape}, output shape {output.shape}"
@@ -798,64 +819,22 @@ class BatchNormLayer(Layer):
         Returns:
             Dictionary with gradients for inputs, gamma, and beta
         """
-        original_shape = output_gradient.shape
-
-        # Reshape to (batch, features) for computation
-        if len(output_gradient.shape) == 4:
-            batch_grad = output_gradient.reshape(
-                output_gradient.shape[0], output_gradient.shape[1], -1
-            )
-            batch_grad = batch_grad.transpose(0, 2, 1).reshape(
-                -1, output_gradient.shape[1]
-            )
-        else:
-            batch_grad = output_gradient
+        batch_grad = self._as_feature_matrix(output_gradient)
 
         batch_size = batch_grad.shape[0]
 
         # Gradient w.r.t. gamma and beta
-        gamma_gradient = np.sum(batch_grad * self.x_normalized, axis=0) / batch_size
-        beta_gradient = np.sum(batch_grad, axis=0) / batch_size
+        gamma_gradient = np.sum(batch_grad * self.x_normalized, axis=0)
+        beta_gradient = np.sum(batch_grad, axis=0)
 
-        # Gradient w.r.t. normalized input
-        x_norm_grad = batch_grad * self.gamma
-
-        # Gradient w.r.t. variance and mean
-        var_grad = (
-            np.sum(
-                x_norm_grad
-                * (self.last_input.reshape(-1, self.num_features) - self.batch_mean)
-                * -0.5
-                * (self.batch_var + self.epsilon) ** -1.5,
-                axis=0,
-            )
-            / batch_size
+        scaled_gradient = batch_grad * self.gamma
+        inverse_std = 1 / np.sqrt(self.batch_var + self.epsilon)
+        input_gradient = inverse_std / batch_size * (
+            batch_size * scaled_gradient
+            - np.sum(scaled_gradient, axis=0)
+            - self.x_normalized * np.sum(scaled_gradient * self.x_normalized, axis=0)
         )
-        mean_grad = (
-            np.sum(x_norm_grad * -1 / np.sqrt(self.batch_var + self.epsilon), axis=0)
-            / batch_size
-        )
-        mean_grad += (
-            var_grad
-            * np.sum(
-                -2 * (self.last_input.reshape(-1, self.num_features) - self.batch_mean),
-                axis=0,
-            )
-            / batch_size
-        )
-
-        # Gradient w.r.t. input
-        input_gradient = (
-            x_norm_grad / np.sqrt(self.batch_var + self.epsilon)
-            + var_grad
-            * 2
-            * (self.last_input.reshape(-1, self.num_features) - self.batch_mean)
-            / batch_size
-            + mean_grad / batch_size
-        )
-
-        # Reshape back
-        input_gradient = input_gradient.reshape(original_shape)
+        input_gradient = self._restore_input_shape(input_gradient)
 
         logger.debug(
             f"BatchNorm layer {self.name} backward: output_gradient shape {output_gradient.shape}, "

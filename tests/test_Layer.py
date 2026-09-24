@@ -7,6 +7,7 @@ from Layer import (
     ReshapeLayer,
     BatchNormLayer,
 )
+from DifferentiableFunction import ReLU
 
 
 class DummyActivation:
@@ -146,6 +147,28 @@ def test_cnn_layer_backward():
     assert (
         grad_dict["biases"].shape == layer.biases.shape
     ), f"Bias gradient shape {grad_dict['biases'].shape} != biases shape {layer.biases.shape}"
+
+
+def test_cnn_padding_and_activation():
+    layer = CNNLayer(
+        input_size=(1, 3, 4),
+        output_size=(1, 5, 6),
+        kernel_size=1,
+        num_filters=1,
+        padding=1,
+        activation_function=ReLU(),
+        name="padded_conv",
+    )
+    layer.weights = np.array([[[[1.0]]]])
+    layer.biases = np.array([-1.0])
+    layer.weights_initialized = True
+
+    output = layer.forward(np.ones((2, 1, 3, 4)))
+    gradients = layer.backward(np.ones_like(output))
+
+    assert output.shape == (2, 1, 5, 6)
+    assert np.all(output >= 0)
+    assert gradients["inputs"].shape == (2, 1, 3, 4)
 
 
 def test_flatten_layer_forward():
@@ -360,6 +383,29 @@ def test_batchnorm_layer_backward_4d():
     assert grad_dict["beta"].shape == (
         channels,
     ), f"Beta gradient shape {grad_dict['beta'].shape} != expected ({channels},)"
+
+
+def test_batchnorm_4d_input_gradient_matches_finite_difference():
+    np.random.seed(1)
+    inputs = np.random.randn(2, 3, 2, 2)
+    output_gradient = np.random.randn(*inputs.shape)
+    layer = BatchNormLayer(num_features=3, momentum=1.0, name="test_bn_gradient")
+
+    layer.forward(inputs)
+    analytic_gradient = layer.backward(output_gradient)["inputs"]
+    numerical_gradient = np.zeros_like(inputs)
+    epsilon = 1e-6
+    for index in np.ndindex(inputs.shape):
+        positive = inputs.copy()
+        negative = inputs.copy()
+        positive[index] += epsilon
+        negative[index] -= epsilon
+        numerical_gradient[index] = (
+            np.sum(layer.forward(positive) * output_gradient)
+            - np.sum(layer.forward(negative) * output_gradient)
+        ) / (2 * epsilon)
+
+    np.testing.assert_allclose(analytic_gradient, numerical_gradient, atol=1e-6)
 
 
 def test_batchnorm_normalizes_output():
