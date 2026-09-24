@@ -1,5 +1,5 @@
 import numpy as np
-from DifferentiableFunction import DifferentiableFunction, SoftMax, ReLU, Sigmoid
+from DifferentiableFunction import DifferentiableFunction, GeLU, SoftMax, ReLU, Sigmoid
 
 
 def test_softmax_function():
@@ -31,6 +31,27 @@ def test_relu_derivative():
     deriv = relu.derivative(x)
     expected = np.array([0.0, 0.0, 1.0])
     np.testing.assert_array_equal(deriv, expected)
+
+
+def test_gelu_matches_exact_definition_and_derivative():
+    gelu = GeLU()
+    values = np.array([-1.5, -0.25, 0.0, 0.75])
+    epsilon = 1e-6
+
+    numerical_derivative = (
+        gelu.function(values + epsilon) - gelu.function(values - epsilon)
+    ) / (2 * epsilon)
+
+    np.testing.assert_allclose(
+        gelu.derivative(values), numerical_derivative, rtol=1e-6, atol=1e-6
+    )
+
+
+def test_gelu_differs_from_relu_near_zero():
+    values = np.array([-0.5, 0.5])
+
+    assert not np.allclose(GeLU().function(values), ReLU().function(values))
+    assert not np.allclose(GeLU().derivative(values), ReLU().derivative(values))
 
 
 def test_sigmoid_function():

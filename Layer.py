@@ -1,13 +1,15 @@
 from typing import Tuple, List
 import numpy as np
-from DifferentiableFunction import DifferentiableFunction, ReLU, Sigmoid, SoftMax
+from DifferentiableFunction import DifferentiableFunction, GeLU, ReLU, Sigmoid, SoftMax
 from typing import Dict
 from abc import abstractmethod
 import logging
 
 logger = logging.getLogger(__name__)
 
-ACTIVATION_TYPES = {activation.__name__: activation for activation in (ReLU, Sigmoid, SoftMax)}
+ACTIVATION_TYPES = {
+    activation.__name__: activation for activation in (GeLU, ReLU, Sigmoid, SoftMax)
+}
 
 
 class Layer:

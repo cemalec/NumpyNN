@@ -7,7 +7,7 @@ from Layer import (
     ReshapeLayer,
     BatchNormLayer,
 )
-from DifferentiableFunction import ReLU
+from DifferentiableFunction import GeLU, ReLU
 
 
 class DummyActivation:
@@ -291,6 +291,14 @@ def test_reshape_to_dict_and_from_dict():
     assert restored_layer.name == layer.name
     assert restored_layer.type == layer.type
     assert restored_layer.output_shape == layer.output_shape
+
+
+def test_dense_layer_serializes_gelu_activation():
+    layer = DenseLayer(2, 3, GeLU(), name="gelu_dense")
+
+    restored_layer = DenseLayer.from_dict(layer.to_dict())
+
+    assert isinstance(restored_layer.activation_function, GeLU)
 
 
 def test_batchnorm_layer_forward():

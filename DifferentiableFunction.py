@@ -1,3 +1,4 @@
+from math import erf, pi, sqrt
 from typing import Callable
 import numpy as np
 
@@ -37,6 +38,20 @@ class ReLU(DifferentiableFunction):
             return (x > 0).astype(x.dtype)
 
         super().__init__(relu, relu_derivative)
+
+
+class GeLU(DifferentiableFunction):
+    def __init__(self):
+        def gelu(x: np.ndarray) -> np.ndarray:
+            erf_values = np.vectorize(erf)(x / sqrt(2))
+            return x / 2 * (1 + erf_values)
+
+        def gelu_derivative(x: np.ndarray) -> np.ndarray:
+            erf_values = np.vectorize(erf)(x / sqrt(2))
+            normal_density = np.exp(-(x**2) / 2) / sqrt(2 * pi)
+            return (1 + erf_values) / 2 + x * normal_density
+
+        super().__init__(gelu, gelu_derivative)
 
 
 class Sigmoid(DifferentiableFunction):
