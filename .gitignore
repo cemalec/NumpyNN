@@ -4,3 +4,4 @@ __pycache__/
 models/
 .DS_Store
 .devcontainer/devcontainer-lock.json
+PLAN.md

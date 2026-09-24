@@ -4,5 +4,11 @@
     "python.testing.pytestEnabled": true,
     "terminal.integrated.env.linux": {
         "PYTHONPATH": "${workspaceFolder}"
+    },
+    "chat.tools.terminal.autoApprove": {
+        "/^python3 --version && python3 -m pytest -q$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }
