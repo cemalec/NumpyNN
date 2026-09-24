@@ -12,6 +12,7 @@ from Layer import (
     MaxPoolLayer,
     PositionalEncodingLayer,
     ReshapeLayer,
+    TransformerBlock,
 )
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, ReLU, Sigmoid, SoftMax
 from Optimizer import Adam, Optimizer, RMSProp, SGD
@@ -32,6 +33,7 @@ LAYER_TYPES = {
     "EmbeddingLayer": EmbeddingLayer,
     "PositionalEncodingLayer": PositionalEncodingLayer,
     "DotProductAttentionLayer": DotProductAttentionLayer,
+    "TransformerBlock": TransformerBlock,
 }
 LOSS_TYPES = {"CrossEntropyLoss": CrossEntropyLoss}
 OPTIMIZER_TYPES = {"SGD": SGD, "RMSProp": RMSProp, "Adam": Adam}
@@ -157,7 +159,7 @@ class Model:
             for param_name in layer.parameters():
                 key = f"{parameter_prefix}{param_name}"
                 if key in data:
-                    setattr(layer, param_name, data[key])
+                    layer.set_parameter(param_name, data[key])
                     layer.weights_initialized = True
 
         # Load optimizer state if available

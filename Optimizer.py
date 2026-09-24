@@ -3,6 +3,19 @@ from typing import Dict, Any
 import numpy as np
 
 
+def _parameter_value(layer: Any, name: str) -> np.ndarray | None:
+    if hasattr(layer, "parameters"):
+        return layer.parameters().get(name)
+    return getattr(layer, name, None)
+
+
+def _set_parameter(layer: Any, name: str, value: np.ndarray) -> None:
+    if hasattr(layer, "set_parameter"):
+        layer.set_parameter(name, value)
+    else:
+        setattr(layer, name, value)
+
+
 class Optimizer:
     def __init__(self):
         self.name = None
@@ -35,12 +48,11 @@ class SGD(Optimizer):
             if gradient is None:
                 continue
 
-            if not hasattr(layer, param_name):
-                continue
-
-            param_val = getattr(layer, param_name)
+            param_val = _parameter_value(layer, param_name)
             if param_val is not None:
-                setattr(layer, param_name, param_val - self.learning_rate * gradient)
+                _set_parameter(
+                    layer, param_name, param_val - self.learning_rate * gradient
+                )
 
     def to_dict(self) -> dict:
         return {"learning_rate": self.learning_rate, "type": self.type}
@@ -61,11 +73,17 @@ class RMSProp(Optimizer):
 
     def initialize_state(self, layer: Any):
         self.s[layer.name] = {}
-        for attr_name in ["weights", "biases", "gamma", "beta"]:
-            if hasattr(layer, attr_name):
-                param = getattr(layer, attr_name)
-                if param is not None:
-                    self.s[layer.name][attr_name] = np.zeros_like(param)
+        if hasattr(layer, "parameters"):
+            parameters = layer.parameters()
+        else:
+            parameters = {
+                name: getattr(layer, name)
+                for name in ["weights", "biases", "gamma", "beta"]
+                if hasattr(layer, name) and getattr(layer, name) is not None
+            }
+        self.s[layer.name] = {
+            name: np.zeros_like(parameter) for name, parameter in parameters.items()
+        }
 
     def step(
         self, layer: Any, parameter_gradients: Dict[str, np.ndarray]
@@ -77,10 +95,7 @@ class RMSProp(Optimizer):
             if gradient is None:
                 continue
 
-            if not hasattr(layer, param_name):
-                continue
-
-            param_val = getattr(layer, param_name)
+            param_val = _parameter_value(layer, param_name)
             if param_val is None:
                 continue
 
@@ -96,7 +111,7 @@ class RMSProp(Optimizer):
                 * gradient
                 / (np.sqrt(self.s[layer.name][param_name]) + self.epsilon)
             )
-            setattr(layer, param_name, param_val - update)
+            _set_parameter(layer, param_name, param_val - update)
 
     def to_dict(self) -> dict:
         return {
@@ -141,13 +156,17 @@ class Adam(Optimizer):
         self.m[layer.name] = {}
         self.v[layer.name] = {}
 
-        # Find all learnable parameters (weights, biases, gamma, beta, etc.)
-        for attr_name in ["weights", "biases", "gamma", "beta"]:
-            if hasattr(layer, attr_name):
-                param = getattr(layer, attr_name)
-                if param is not None:
-                    self.m[layer.name][attr_name] = np.zeros_like(param)
-                    self.v[layer.name][attr_name] = np.zeros_like(param)
+        if hasattr(layer, "parameters"):
+            parameters = layer.parameters()
+        else:
+            parameters = {
+                name: getattr(layer, name)
+                for name in ["weights", "biases", "gamma", "beta"]
+                if hasattr(layer, name) and getattr(layer, name) is not None
+            }
+        for name, parameter in parameters.items():
+            self.m[layer.name][name] = np.zeros_like(parameter)
+            self.v[layer.name][name] = np.zeros_like(parameter)
 
     def step(
         self, layer: Any, parameter_gradients: Dict[str, np.ndarray]
@@ -162,11 +181,7 @@ class Adam(Optimizer):
             if gradient is None:
                 continue
 
-            # Check if layer has this parameter and it's learnable
-            if not hasattr(layer, param_name):
-                continue
-
-            param_val = getattr(layer, param_name)
+            param_val = _parameter_value(layer, param_name)
             if param_val is None:
                 continue
 
@@ -188,7 +203,7 @@ class Adam(Optimizer):
             v_hat = self.v[layer.name][param_name] / (1 - self.beta2**self.t)
 
             update = self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
-            setattr(layer, param_name, param_val - update)
+            _set_parameter(layer, param_name, param_val - update)
 
     def to_dict(self) -> dict:
         return {

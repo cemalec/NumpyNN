@@ -12,6 +12,7 @@ from Layer import (
     BatchNormLayer,
     EmbeddingLayer,
     LayerNormLayer,
+    TransformerBlock,
 )
 from DifferentiableFunction import GeLU, ReLU
 
@@ -846,3 +847,19 @@ def test_attention_backward_validates_gradient_shape():
 
     with pytest.raises(ValueError, match="wrong shape"):
         layer.backward(np.ones((1, 2, 1)))
+
+
+def test_transformer_block_returns_input_and_parameter_gradients():
+    block = TransformerBlock(embedding_dim=2, feed_forward_dim=3)
+    inputs = np.array([[[0.2, -0.1], [0.4, 0.3]]])
+
+    output = block.forward(inputs)
+    gradients = block.backward(np.ones_like(output))
+
+    assert output.shape == inputs.shape
+    assert gradients.input_gradient.shape == inputs.shape
+    assert set(gradients.parameter_gradients) == set(block.parameters())
+    assert all(
+        gradient.shape == block.parameters()[name].shape
+        for name, gradient in gradients.parameter_gradients.items()
+    )

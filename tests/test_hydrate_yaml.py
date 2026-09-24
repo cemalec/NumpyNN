@@ -128,3 +128,25 @@ optimizer:
 
     assert model.layers[0].type == "LayerNormLayer"
     assert model.layers[0].num_features == 4
+
+
+def test_hydrate_yaml_creates_transformer_block(tmp_path: Path):
+    yaml_content = """
+layers:
+  - type: TransformerBlock
+    name: transformer
+    embedding_dim: 4
+    feed_forward_dim: 8
+loss: CrossEntropyLoss
+optimizer:
+  type: SGD
+  learning_rate: 0.1
+"""
+    cfg_path = tmp_path / "transformer_config.yaml"
+    _write_yaml(cfg_path, yaml_content)
+
+    model = hydrate_model(str(cfg_path))
+
+    assert model.layers[0].type == "TransformerBlock"
+    assert model.layers[0].embedding_dim == 4
+    assert model.layers[0].feed_forward_dim == 8

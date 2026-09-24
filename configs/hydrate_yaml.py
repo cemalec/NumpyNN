@@ -81,6 +81,13 @@ class LayerNormLayerConfig(BaseModel):
     name: str = None
 
 
+class TransformerBlockConfig(BaseModel):
+    type: str = "TransformerBlock"
+    embedding_dim: int
+    feed_forward_dim: int = None
+    name: str = None
+
+
 LayerConfigType: TypeAlias = (
     LayerConfig
     | CNNLayerConfig
@@ -91,6 +98,7 @@ LayerConfigType: TypeAlias = (
     | DotProductAttentionLayerConfig
     | PositionalEncodingLayerConfig
     | LayerNormLayerConfig
+    | TransformerBlockConfig
 )
 
 
@@ -120,6 +128,8 @@ def get_layer_model(layer_type: str):
         return PositionalEncodingLayerConfig
     elif layer_type == "LayerNormLayer":
         return LayerNormLayerConfig
+    elif layer_type == "TransformerBlock":
+        return TransformerBlockConfig
     else:
         raise ValueError(f"Unsupported layer type: {layer_type}")
 

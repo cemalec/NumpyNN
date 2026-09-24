@@ -10,6 +10,7 @@ from Layer import (
     LayerGradients,
     LayerNormLayer,
     PositionalEncodingLayer,
+    TransformerBlock,
 )
 from Optimizer import Optimizer, SGD
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, SoftMax
@@ -196,6 +197,43 @@ def test_model_save_and_load_preserves_layernorm_parameters(tmp_path):
     assert isinstance(restored.layers[0], LayerNormLayer)
     np.testing.assert_array_equal(restored.layers[0].gamma, layer_norm.gamma)
     np.testing.assert_array_equal(restored.layers[0].beta, layer_norm.beta)
+
+
+def test_model_save_and_load_preserves_transformer_block_parameters(tmp_path):
+    block = TransformerBlock(embedding_dim=2, feed_forward_dim=3, name="transformer")
+    block.forward(np.ones((1, 2, 2)))
+    model = Model([block], CrossEntropyLoss(), SGD(learning_rate=0.1))
+    path = tmp_path / "transformer_model.npz"
+
+    model.save(str(path))
+    restored = Model.load(str(path))
+
+    assert isinstance(restored.layers[0], TransformerBlock)
+    for parameter_name, parameter in block.parameters().items():
+        np.testing.assert_array_equal(
+            restored.layers[0].parameters()[parameter_name], parameter
+        )
+
+
+def test_model_backward_updates_transformer_block_parameters():
+    block = TransformerBlock(embedding_dim=2, feed_forward_dim=3, name="transformer")
+    loss = DifferentiableFunction(
+        lambda y_true, y_pred: np.sum(y_pred),
+        lambda y_true, y_pred: np.arange(y_pred.size).reshape(y_pred.shape) + 1,
+    )
+    model = Model([block], loss, SGD(learning_rate=0.01))
+    inputs = np.array([[[0.2, -0.1], [0.4, 0.3]]])
+    predictions = model.forward(inputs)
+    original_parameters = {
+        name: parameter.copy() for name, parameter in block.parameters().items()
+    }
+
+    model.backward(np.zeros_like(predictions), predictions)
+
+    assert any(
+        not np.array_equal(block.parameters()[name], parameter)
+        for name, parameter in original_parameters.items()
+    )
 
 
 @pytest.mark.parametrize(

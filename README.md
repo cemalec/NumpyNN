@@ -44,6 +44,25 @@ Let $B$ be batch size, $F$ feature count, $C$ channels, $H$ and $W$ spatial dime
 | `EmbeddingLayer` | integer IDs $(B, L) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow \texttt{None}$ | `weights`: $(V, D)$ |
 | `PositionalEncodingLayer` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | none |
 | `DotProductAttentionLayer` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | `query_weights`, `key_weights`, `value_weights`, `output_weights`: $(D, D)$ |
+| `TransformerBlock` | $(B, L, D) \rightarrow (B, L, D)$ | $(B, L, D) \rightarrow (B, L, D)$ | attention, two LayerNorms, and two Dense layers |
+
+## Transformer Block
+
+```mermaid
+flowchart LR
+	X[x] --> ATT[dot-product attention]
+	X --> ADD1((+))
+	ATT --> ADD1
+	ADD1 --> LN1[layer norm]
+	LN1 --> FF1[dense + GeLU]
+	FF1 --> FF2[dense]
+	LN1 --> ADD2((+))
+	FF2 --> ADD2
+	ADD2 --> LN2[layer norm]
+	LN2 --> Y[y]
+```
+
+The block keeps both residual additions explicit. During backward propagation, each addition sends its upstream gradient down both branches, and the two input gradients are added.
 
 `DenseLayer`, `CNNLayer`, and `BatchNormLayer` validate their declared feature boundaries. CNN, pool, reshape, and layer-size configuration values are also checked before NumPy operations can fail ambiguously.
 

@@ -1,5 +1,5 @@
 import numpy as np
-from Layer import DotProductAttentionLayer
+from Layer import DotProductAttentionLayer, TransformerBlock
 from Optimizer import SGD, RMSProp, Adam
 
 
@@ -192,3 +192,29 @@ def test_optimizers_update_all_attention_parameters():
 
         for name, original_parameter in original_parameters.items():
             assert not np.array_equal(getattr(layer, name), original_parameter)
+
+
+def test_optimizers_update_all_transformer_block_parameters():
+    optimizers = [
+        SGD(learning_rate=0.01),
+        RMSProp(learning_rate=0.01),
+        Adam(learning_rate=0.01),
+    ]
+
+    for index, optimizer in enumerate(optimizers):
+        block = TransformerBlock(
+            embedding_dim=2, feed_forward_dim=3, name=f"transformer_{index}"
+        )
+        block.forward(np.ones((1, 2, 2)))
+        original_parameters = {
+            name: parameter.copy() for name, parameter in block.parameters().items()
+        }
+        parameter_gradients = {
+            name: np.ones_like(parameter)
+            for name, parameter in block.parameters().items()
+        }
+
+        optimizer.step(block, parameter_gradients)
+
+        for name, original_parameter in original_parameters.items():
+            assert not np.array_equal(block.parameters()[name], original_parameter)

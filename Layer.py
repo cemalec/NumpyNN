@@ -61,6 +61,10 @@ class Layer:
             if parameter is not None
         }
 
+    def set_parameter(self, name: str, value: np.ndarray) -> None:
+        """Replace one trainable array returned by ``parameters()``."""
+        setattr(self, name, value)
+
     @abstractmethod
     def to_dict(self) -> Dict:
         pass
@@ -1259,5 +1263,144 @@ class DotProductAttentionLayer(Layer):
     def from_dict(cls, data: Dict) -> "DotProductAttentionLayer":
         return cls(
             embedding_dim=data["embedding_dim"],
+            name=data.get("name"),
+        )
+
+
+class TransformerBlock(Layer):
+    """Single-head attention, residual connections, normalization, and feed-forward layers.
+
+    The computation remains explicit:
+    ``x -> attention -> + x -> layer norm -> dense -> GeLU -> dense -> + -> layer norm``.
+    """
+
+    def __init__(
+        self,
+        embedding_dim: int,
+        feed_forward_dim: int | None = None,
+        name: str = None,
+    ):
+        super().__init__()
+        _require_positive_int(embedding_dim, "embedding_dim")
+        if feed_forward_dim is None:
+            feed_forward_dim = 4 * embedding_dim
+        _require_positive_int(feed_forward_dim, "feed_forward_dim")
+        self.name = name
+        self.type = "TransformerBlock"
+        self.embedding_dim = embedding_dim
+        self.feed_forward_dim = feed_forward_dim
+        self.attention = DotProductAttentionLayer(embedding_dim, name="attention")
+        self.layer_norm_1 = LayerNormLayer(embedding_dim, name="layer_norm_1")
+        self.feed_forward_1 = DenseLayer(
+            embedding_dim, feed_forward_dim, GeLU(), name="feed_forward_1"
+        )
+        self.feed_forward_2 = DenseLayer(
+            feed_forward_dim,
+            embedding_dim,
+            DifferentiableFunction(lambda x: x, lambda x: np.ones_like(x)),
+            name="feed_forward_2",
+        )
+        self.layer_norm_2 = LayerNormLayer(embedding_dim, name="layer_norm_2")
+        self.residual_1 = None
+        self.residual_2 = None
+
+    def _named_layers(self) -> Dict[str, Layer]:
+        return {
+            "attention": self.attention,
+            "layer_norm_1": self.layer_norm_1,
+            "feed_forward_1": self.feed_forward_1,
+            "feed_forward_2": self.feed_forward_2,
+            "layer_norm_2": self.layer_norm_2,
+        }
+
+    def initialize_weights(self):
+        for layer in self._named_layers().values():
+            layer.initialize_weights()
+            layer.weights_initialized = True
+
+    def parameters(self) -> Dict[str, np.ndarray]:
+        return {
+            f"{layer_name}.{parameter_name}": parameter
+            for layer_name, layer in self._named_layers().items()
+            for parameter_name, parameter in layer.parameters().items()
+        }
+
+    def set_parameter(self, name: str, value: np.ndarray) -> None:
+        layer_name, parameter_name = name.split(".", maxsplit=1)
+        if layer_name not in self._named_layers():
+            raise ValueError(f"Unknown TransformerBlock parameter: {name}")
+        self._named_layers()[layer_name].set_parameter(parameter_name, value)
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        if input_data.ndim != 3:
+            raise ValueError("TransformerBlock expects 3D input")
+        if not np.issubdtype(input_data.dtype, np.floating):
+            raise ValueError("TransformerBlock expects floating-point input")
+        if input_data.shape[-1] != self.embedding_dim:
+            raise ValueError(
+                "TransformerBlock input feature dimension does not match embedding_dim"
+            )
+
+        super().forward(input_data)
+        self.last_input = input_data
+        attention_output = self.attention.forward(input_data)
+        self.residual_1 = input_data + attention_output
+        normalized_attention = self.layer_norm_1.forward(self.residual_1)
+        feed_forward_hidden = self.feed_forward_1.forward(normalized_attention)
+        feed_forward_output = self.feed_forward_2.forward(feed_forward_hidden)
+        self.residual_2 = normalized_attention + feed_forward_output
+        return self.layer_norm_2.forward(self.residual_2)
+
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
+        if output_gradient.shape != self.last_input.shape:
+            raise ValueError("TransformerBlock gradient has the wrong shape")
+
+        layer_norm_2_gradients = self.layer_norm_2.backward(output_gradient)
+        feed_forward_2_gradients = self.feed_forward_2.backward(
+            layer_norm_2_gradients.input_gradient
+        )
+        feed_forward_1_gradients = self.feed_forward_1.backward(
+            feed_forward_2_gradients.input_gradient
+        )
+        layer_norm_1_gradients = self.layer_norm_1.backward(
+            layer_norm_2_gradients.input_gradient
+            + feed_forward_1_gradients.input_gradient
+        )
+        attention_gradients = self.attention.backward(layer_norm_1_gradients.input_gradient)
+
+        parameter_gradients = {}
+        for layer_name, gradients in {
+            "attention": attention_gradients,
+            "layer_norm_1": layer_norm_1_gradients,
+            "feed_forward_1": feed_forward_1_gradients,
+            "feed_forward_2": feed_forward_2_gradients,
+            "layer_norm_2": layer_norm_2_gradients,
+        }.items():
+            parameter_gradients.update(
+                {
+                    f"{layer_name}.{parameter_name}": gradient
+                    for parameter_name, gradient in gradients.parameter_gradients.items()
+                }
+            )
+
+        return LayerGradients(
+            input_gradient=layer_norm_1_gradients.input_gradient
+            + attention_gradients.input_gradient,
+            parameter_gradients=parameter_gradients,
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "embedding_dim": self.embedding_dim,
+            "feed_forward_dim": self.feed_forward_dim,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "TransformerBlock":
+        return cls(
+            embedding_dim=data["embedding_dim"],
+            feed_forward_dim=data.get("feed_forward_dim"),
             name=data.get("name"),
         )
