@@ -28,7 +28,7 @@
         // To use host Docker, set: DOCKER_HOST=unix:///var/run/docker-host.sock
         // To use docker-in-docker, unset this or set: DOCKER_HOST=unix:///var/run/docker.sock
         "DOCKER_HOST": "unix:///var/run/docker-host.sock",
-        "PYTHONPATH": "/workspaces/NumpyNN"
+        "PYTHONPATH": "${containerWorkspaceFolder}"
     },
     "postCreateCommand": "pip install -r requirements.txt",
     "postStartCommand": "sudo chmod 666 /var/run/docker-host.sock || true",
@@ -36,7 +36,7 @@
     "customizations": {
         "vscode": {
             "settings": {
-                "python.defaultInterpreterPath": "/usr/local/bin/python"
+                "python.defaultInterpreterPath": "python3"
             },
             "extensions": [
                 "ms-python.python",
