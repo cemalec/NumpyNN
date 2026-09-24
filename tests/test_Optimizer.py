@@ -1,4 +1,5 @@
 import numpy as np
+from Layer import DotProductAttentionLayer
 from Optimizer import SGD, RMSProp, Adam
 
 
@@ -166,3 +167,28 @@ def test_adam_state_round_trip_preserves_all_parameter_types(tmp_path):
     assert restored.t == 4
     np.testing.assert_array_equal(restored.m["batch_norm"]["gamma"], [0.1])
     np.testing.assert_array_equal(restored.v["batch_norm"]["beta"], [0.4])
+
+
+def test_optimizers_update_all_attention_parameters():
+    optimizers = [
+        SGD(learning_rate=0.01),
+        RMSProp(learning_rate=0.01),
+        Adam(learning_rate=0.01),
+    ]
+
+    for index, optimizer in enumerate(optimizers):
+        layer = DotProductAttentionLayer(embedding_dim=2, name=f"attention_{index}")
+        layer.initialize_weights()
+        layer.weights_initialized = True
+        original_parameters = {
+            name: parameter.copy() for name, parameter in layer.parameters().items()
+        }
+        parameter_gradients = {
+            name: np.ones_like(parameter)
+            for name, parameter in layer.parameters().items()
+        }
+
+        optimizer.step(layer, parameter_gradients)
+
+        for name, original_parameter in original_parameters.items():
+            assert not np.array_equal(getattr(layer, name), original_parameter)

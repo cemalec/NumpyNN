@@ -6,6 +6,7 @@ from Layer import (
     CNNLayer,
     FlattenLayer,
     MaxPoolLayer,
+    DotProductAttentionLayer,
     ReshapeLayer,
     BatchNormLayer,
     EmbeddingLayer,
@@ -613,3 +614,110 @@ def test_embedding_weight_gradient_matches_finite_difference():
 
     numerical_gradient = (positive_loss - negative_loss) / (2 * epsilon)
     np.testing.assert_allclose(analytic_gradient[index], numerical_gradient)
+
+
+def test_attention_forward_shape_and_attention_rows():
+    layer = DotProductAttentionLayer(embedding_dim=3)
+    inputs = np.array([[[1.0, 0.0, -1.0], [0.5, 2.0, 1.0]]])
+
+    output = layer.forward(inputs)
+
+    assert output.shape == inputs.shape
+    np.testing.assert_allclose(np.sum(layer.attention_weights, axis=-1), 1.0)
+    assert set(layer.parameters()) == {
+        "query_weights",
+        "key_weights",
+        "value_weights",
+        "output_weights",
+    }
+
+
+def test_attention_is_permutation_equivariant_without_positions():
+    layer = DotProductAttentionLayer(embedding_dim=2)
+    layer.query_weights = np.array([[1.0, 0.5], [0.0, 1.0]])
+    layer.key_weights = np.array([[0.5, 0.0], [1.0, 1.0]])
+    layer.value_weights = np.array([[1.0, -0.5], [0.5, 1.0]])
+    layer.output_weights = np.array([[1.0, 0.0], [0.0, 1.0]])
+    layer.weights_initialized = True
+    inputs = np.array([[[1.0, 2.0], [3.0, 1.0], [0.0, -1.0]]])
+    permutation = np.array([2, 0, 1])
+
+    output = layer.forward(inputs)
+    permuted_output = layer.forward(inputs[:, permutation])
+
+    np.testing.assert_allclose(permuted_output, output[:, permutation])
+
+
+@pytest.mark.parametrize(
+    "inputs, message",
+    [
+        (np.ones((2, 3)), "3D"),
+        (np.ones((1, 2, 3), dtype=int), "floating-point"),
+        (np.ones((1, 2, 4)), "feature dimension"),
+    ],
+)
+def test_attention_validates_input_contract(inputs, message):
+    with pytest.raises(ValueError, match=message):
+        DotProductAttentionLayer(embedding_dim=3).forward(inputs)
+
+
+def test_attention_backward_matches_finite_differences():
+    layer = DotProductAttentionLayer(embedding_dim=2)
+    layer.query_weights = np.array([[0.2, -0.3], [0.4, 0.1]])
+    layer.key_weights = np.array([[-0.2, 0.5], [0.3, 0.2]])
+    layer.value_weights = np.array([[0.1, 0.4], [-0.5, 0.2]])
+    layer.output_weights = np.array([[0.3, -0.1], [0.2, 0.6]])
+    layer.weights_initialized = True
+    inputs = np.array([[[0.2, -0.4], [0.7, 0.3]]])
+    output_gradient = np.array([[[0.5, -0.2], [-0.3, 0.4]]])
+
+    layer.forward(inputs)
+    gradients = layer.backward(output_gradient)
+    epsilon = 1e-6
+
+    def loss() -> float:
+        return np.sum(layer.forward(inputs) * output_gradient)
+
+    for parameter_name, index in {
+        "query_weights": (0, 1),
+        "key_weights": (1, 0),
+        "value_weights": (0, 0),
+        "output_weights": (1, 1),
+    }.items():
+        parameter = getattr(layer, parameter_name)
+        original_value = parameter[index]
+        parameter[index] = original_value + epsilon
+        positive_loss = loss()
+        parameter[index] = original_value - epsilon
+        negative_loss = loss()
+        parameter[index] = original_value
+        numerical_gradient = (positive_loss - negative_loss) / (2 * epsilon)
+        np.testing.assert_allclose(
+            gradients.parameter_gradients[parameter_name][index],
+            numerical_gradient,
+            rtol=1e-5,
+            atol=1e-6,
+        )
+
+    input_index = (0, 1, 0)
+    original_input = inputs[input_index]
+    inputs[input_index] = original_input + epsilon
+    positive_loss = loss()
+    inputs[input_index] = original_input - epsilon
+    negative_loss = loss()
+    inputs[input_index] = original_input
+    numerical_gradient = (positive_loss - negative_loss) / (2 * epsilon)
+    np.testing.assert_allclose(
+        gradients.input_gradient[input_index],
+        numerical_gradient,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+
+
+def test_attention_backward_validates_gradient_shape():
+    layer = DotProductAttentionLayer(embedding_dim=2)
+    layer.forward(np.ones((1, 2, 2)))
+
+    with pytest.raises(ValueError, match="wrong shape"):
+        layer.backward(np.ones((1, 2, 1)))

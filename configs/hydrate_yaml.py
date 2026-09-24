@@ -62,6 +62,12 @@ class BatchNormLayerConfig(BaseModel):
     name: str = None
 
 
+class DotProductAttentionLayerConfig(BaseModel):
+    type: str = "DotProductAttentionLayer"
+    embedding_dim: int
+    name: str = None
+
+
 LayerConfigType: TypeAlias = (
     LayerConfig
     | CNNLayerConfig
@@ -69,6 +75,7 @@ LayerConfigType: TypeAlias = (
     | ReshapeLayerConfig
     | MaxPoolLayerConfig
     | BatchNormLayerConfig
+    | DotProductAttentionLayerConfig
 )
 
 
@@ -92,6 +99,8 @@ def get_layer_model(layer_type: str):
         return MaxPoolLayerConfig
     elif layer_type == "BatchNormLayer":
         return BatchNormLayerConfig
+    elif layer_type == "DotProductAttentionLayer":
+        return DotProductAttentionLayerConfig
     else:
         raise ValueError(f"Unsupported layer type: {layer_type}")
 

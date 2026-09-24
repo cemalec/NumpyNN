@@ -68,3 +68,23 @@ def test_hydrate_yaml_invalid_config_raises(tmp_path: Path):
 
     with pytest.raises(Exception):
         hydrate_model(str(cfg_path))
+
+
+def test_hydrate_yaml_creates_attention_layer(tmp_path: Path):
+    yaml_content = """
+layers:
+  - type: DotProductAttentionLayer
+    name: attention
+    embedding_dim: 4
+loss: CrossEntropyLoss
+optimizer:
+  type: SGD
+  learning_rate: 0.1
+"""
+    cfg_path = tmp_path / "attention_config.yaml"
+    _write_yaml(cfg_path, yaml_content)
+
+    model = hydrate_model(str(cfg_path))
+
+    assert model.layers[0].type == "DotProductAttentionLayer"
+    assert model.layers[0].embedding_dim == 4

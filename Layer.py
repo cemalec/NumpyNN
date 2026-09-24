@@ -993,3 +993,138 @@ class EmbeddingLayer(Layer):
             embedding_dim=data["embedding_dim"],
             name=data.get("name"),
         )
+
+
+class DotProductAttentionLayer(Layer):
+    """Single-head self-attention without positional or causal masking."""
+
+    def __init__(self, embedding_dim: int, name: str = None):
+        super().__init__()
+        _require_positive_int(embedding_dim, "embedding_dim")
+        self.name = name
+        self.type = "DotProductAttentionLayer"
+        self.embedding_dim = embedding_dim
+        self.query_weights = None
+        self.key_weights = None
+        self.value_weights = None
+        self.output_weights = None
+        self.queries = None
+        self.keys = None
+        self.values = None
+        self.scores = None
+        self.attention_weights = None
+        self.attention_output = None
+
+    def initialize_weights(self):
+        scale = np.sqrt(1 / self.embedding_dim)
+        shape = (self.embedding_dim, self.embedding_dim)
+        self.query_weights = np.random.randn(*shape) * scale
+        self.key_weights = np.random.randn(*shape) * scale
+        self.value_weights = np.random.randn(*shape) * scale
+        self.output_weights = np.random.randn(*shape) * scale
+
+    def parameters(self) -> Dict[str, np.ndarray]:
+        return {
+            name: parameter
+            for name, parameter in {
+                "query_weights": self.query_weights,
+                "key_weights": self.key_weights,
+                "value_weights": self.value_weights,
+                "output_weights": self.output_weights,
+            }.items()
+            if parameter is not None
+        }
+
+    @staticmethod
+    def _softmax(scores: np.ndarray) -> np.ndarray:
+        shifted_scores = scores - np.max(scores, axis=-1, keepdims=True)
+        exponentials = np.exp(shifted_scores)
+        return exponentials / np.sum(exponentials, axis=-1, keepdims=True)
+
+    def forward(self, input_data: np.ndarray) -> np.ndarray:
+        if input_data.ndim != 3:
+            raise ValueError("DotProductAttentionLayer expects 3D input")
+        if not np.issubdtype(input_data.dtype, np.floating):
+            raise ValueError("DotProductAttentionLayer expects floating-point input")
+        if input_data.shape[-1] != self.embedding_dim:
+            raise ValueError(
+                "DotProductAttentionLayer input feature dimension does not match embedding_dim"
+            )
+
+        super().forward(input_data)
+        self.last_input = input_data
+        self.queries = input_data @ self.query_weights
+        self.keys = input_data @ self.key_weights
+        self.values = input_data @ self.value_weights
+        self.scores = self.queries @ np.swapaxes(self.keys, -1, -2)
+        self.scores /= np.sqrt(self.embedding_dim)
+        self.attention_weights = self._softmax(self.scores)
+        self.attention_output = self.attention_weights @ self.values
+        return self.attention_output @ self.output_weights
+
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
+        if output_gradient.shape != self.last_input.shape:
+            raise ValueError("DotProductAttentionLayer gradient has the wrong shape")
+
+        output_weights_gradient = np.einsum(
+            "bld,ble->de", self.attention_output, output_gradient
+        )
+        attention_output_gradient = output_gradient @ self.output_weights.T
+
+        attention_weights_gradient = attention_output_gradient @ np.swapaxes(
+            self.values, -1, -2
+        )
+        value_gradient = np.swapaxes(self.attention_weights, -1, -2) @ (
+            attention_output_gradient
+        )
+
+        score_gradient = self.attention_weights * (
+            attention_weights_gradient
+            - np.sum(
+                attention_weights_gradient * self.attention_weights,
+                axis=-1,
+                keepdims=True,
+            )
+        )
+        scale = np.sqrt(self.embedding_dim)
+        query_gradient = score_gradient @ self.keys / scale
+        key_gradient = np.swapaxes(score_gradient, -1, -2) @ self.queries / scale
+
+        query_weights_gradient = np.einsum(
+            "bld,ble->de", self.last_input, query_gradient
+        )
+        key_weights_gradient = np.einsum(
+            "bld,ble->de", self.last_input, key_gradient
+        )
+        value_weights_gradient = np.einsum(
+            "bld,ble->de", self.last_input, value_gradient
+        )
+        input_gradient = (
+            query_gradient @ self.query_weights.T
+            + key_gradient @ self.key_weights.T
+            + value_gradient @ self.value_weights.T
+        )
+
+        return LayerGradients(
+            input_gradient=input_gradient,
+            parameter_gradients={
+                "query_weights": query_weights_gradient,
+                "key_weights": key_weights_gradient,
+                "value_weights": value_weights_gradient,
+                "output_weights": output_weights_gradient,
+            },
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "type": self.type,
+            "embedding_dim": self.embedding_dim,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "DotProductAttentionLayer":
+        return cls(
+            embedding_dim=data["embedding_dim"],
+            name=data.get("name"),
+        )

@@ -2,7 +2,13 @@ import unittest
 import numpy as np
 import pytest
 from Model import Model
-from Layer import BatchNormLayer, DenseLayer, EmbeddingLayer, LayerGradients
+from Layer import (
+    BatchNormLayer,
+    DenseLayer,
+    DotProductAttentionLayer,
+    EmbeddingLayer,
+    LayerGradients,
+)
 from Optimizer import Optimizer, SGD
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, SoftMax
 
@@ -121,6 +127,45 @@ def test_model_save_and_load_preserves_embedding_weights(tmp_path):
 
     assert isinstance(restored.layers[0], EmbeddingLayer)
     np.testing.assert_array_equal(restored.layers[0].weights, embedding.weights)
+
+
+def test_model_save_and_load_preserves_attention_weights(tmp_path):
+    attention = DotProductAttentionLayer(embedding_dim=2, name="attention")
+    attention.query_weights = np.array([[0.1, 0.2], [0.3, 0.4]])
+    attention.key_weights = np.array([[0.5, 0.6], [0.7, 0.8]])
+    attention.value_weights = np.array([[0.9, 1.0], [1.1, 1.2]])
+    attention.output_weights = np.array([[1.3, 1.4], [1.5, 1.6]])
+    attention.weights_initialized = True
+    model = Model([attention], CrossEntropyLoss(), SGD(learning_rate=0.1))
+    path = tmp_path / "attention_model.npz"
+
+    model.save(str(path))
+    restored = Model.load(str(path))
+
+    assert isinstance(restored.layers[0], DotProductAttentionLayer)
+    for parameter_name, parameter in attention.parameters().items():
+        np.testing.assert_array_equal(
+            restored.layers[0].parameters()[parameter_name], parameter
+        )
+
+
+def test_model_backward_updates_attention_parameters():
+    attention = DotProductAttentionLayer(embedding_dim=2, name="attention")
+    loss = DifferentiableFunction(
+        lambda y_true, y_pred: np.sum(y_pred),
+        lambda y_true, y_pred: np.ones_like(y_pred),
+    )
+    model = Model([attention], loss, SGD(learning_rate=0.01))
+    inputs = np.array([[[0.2, -0.1], [0.4, 0.3]]])
+    predictions = model.forward(inputs)
+    original_parameters = {
+        name: parameter.copy() for name, parameter in attention.parameters().items()
+    }
+
+    model.backward(np.zeros_like(predictions), predictions)
+
+    for name, original_parameter in original_parameters.items():
+        assert not np.array_equal(getattr(attention, name), original_parameter)
 
 
 @pytest.mark.parametrize(

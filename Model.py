@@ -4,6 +4,7 @@ from Layer import (
     BatchNormLayer,
     CNNLayer,
     DenseLayer,
+    DotProductAttentionLayer,
     EmbeddingLayer,
     FlattenLayer,
     LayerGradients,
@@ -26,6 +27,7 @@ LAYER_TYPES = {
     "MaxPoolLayer": MaxPoolLayer,
     "BatchNormLayer": BatchNormLayer,
     "EmbeddingLayer": EmbeddingLayer,
+    "DotProductAttentionLayer": DotProductAttentionLayer,
 }
 LOSS_TYPES = {"CrossEntropyLoss": CrossEntropyLoss}
 OPTIMIZER_TYPES = {"SGD": SGD, "RMSProp": RMSProp, "Adam": Adam}
