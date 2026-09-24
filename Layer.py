@@ -3,6 +3,7 @@ import numpy as np
 from DifferentiableFunction import DifferentiableFunction, GeLU, ReLU, Sigmoid, SoftMax
 from typing import Dict
 from abc import abstractmethod
+from dataclasses import dataclass
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,6 +11,14 @@ logger = logging.getLogger(__name__)
 ACTIVATION_TYPES = {
     activation.__name__: activation for activation in (GeLU, ReLU, Sigmoid, SoftMax)
 }
+
+
+@dataclass
+class LayerGradients:
+    """Gradients produced by one layer's backward pass."""
+
+    input_gradient: np.ndarray | None
+    parameter_gradients: Dict[str, np.ndarray]
 
 
 class Layer:
@@ -33,7 +42,7 @@ class Layer:
             self.weights_initialized = True
 
     @abstractmethod
-    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
         pass
 
     def parameters(self) -> Dict[str, np.ndarray]:
@@ -113,7 +122,7 @@ class DenseLayer(Layer):
 
     def backward(
         self, dL_da: np.ndarray, apply_activation_derivative: bool = True
-    ) -> Dict[str, np.ndarray]:
+    ) -> LayerGradients:
         """
         Performs the backward pass through the layer, updating weights and biases.
         Parameters:
@@ -145,13 +154,13 @@ class DenseLayer(Layer):
         logger.debug(
             f"Backward pass in layer {self.name}: output_gradient shape {dL_da.shape}, input_gradient shape {input_gradient.shape}"
         )
-        grad_dict = {
-            "inputs": input_gradient,
-            "weights": weight_gradient,
-            "biases": bias_gradient,
-        }
-
-        return grad_dict
+        return LayerGradients(
+            input_gradient=input_gradient,
+            parameter_gradients={
+                "weights": weight_gradient,
+                "biases": bias_gradient,
+            },
+        )
 
         # Update weights and biases will be handled by the optimizer in Model.py
 
@@ -277,7 +286,7 @@ class CNNLayer(Layer):
             return output
         return self.activation_function.function(output)
 
-    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
         """
         Vectorized backward pass for CNN layer.
 
@@ -376,11 +385,13 @@ class CNNLayer(Layer):
                 :, :, self.padding : -self.padding, self.padding : -self.padding
             ]
 
-        return {
-            "inputs": input_gradient,
-            "weights": weight_gradient,
-            "biases": bias_gradient,
-        }
+        return LayerGradients(
+            input_gradient=input_gradient,
+            parameter_gradients={
+                "weights": weight_gradient,
+                "biases": bias_gradient,
+            },
+        )
 
     def to_dict(self) -> Dict:
         return {
@@ -456,7 +467,7 @@ class FlattenLayer(Layer):
         logger.debug(f"Flatten layer {self.name}: output shape {output.shape}")
         return output
 
-    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
         """
         Reshape gradient back to original input shape.
 
@@ -474,11 +485,7 @@ class FlattenLayer(Layer):
             f"input_gradient shape {input_gradient.shape}"
         )
 
-        return {
-            "inputs": input_gradient,
-            "weights": None,
-            "biases": None,
-        }
+        return LayerGradients(input_gradient=input_gradient, parameter_gradients={})
 
     def to_dict(self) -> Dict:
         return {
@@ -530,7 +537,7 @@ class ReshapeLayer(Layer):
         )
         return output
 
-    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
         """
         Reshape gradient back to original input shape.
 
@@ -547,11 +554,7 @@ class ReshapeLayer(Layer):
             f"input_gradient shape {input_gradient.shape}"
         )
 
-        return {
-            "inputs": input_gradient,
-            "weights": None,
-            "biases": None,
-        }
+        return LayerGradients(input_gradient=input_gradient, parameter_gradients={})
 
     def to_dict(self) -> Dict:
         return {
@@ -625,7 +628,7 @@ class MaxPoolLayer(Layer):
         )
         return output
 
-    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
         """
         Max pooling backward pass using strided views.
 
@@ -700,11 +703,7 @@ class MaxPoolLayer(Layer):
             f"input_gradient shape {input_gradient.shape}"
         )
 
-        return {
-            "inputs": input_gradient,
-            "weights": None,
-            "biases": None,
-        }
+        return LayerGradients(input_gradient=input_gradient, parameter_gradients={})
 
     def to_dict(self) -> Dict:
         return {
@@ -833,7 +832,7 @@ class BatchNormLayer(Layer):
         )
         return output
 
-    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
         """
         Batch normalization backward pass.
 
@@ -865,11 +864,10 @@ class BatchNormLayer(Layer):
             f"input_gradient shape {input_gradient.shape}"
         )
 
-        return {
-            "inputs": input_gradient,
-            "gamma": gamma_gradient,
-            "beta": beta_gradient,
-        }
+        return LayerGradients(
+            input_gradient=input_gradient,
+            parameter_gradients={"gamma": gamma_gradient, "beta": beta_gradient},
+        )
 
     def to_dict(self) -> Dict:
         return {
@@ -922,14 +920,16 @@ class EmbeddingLayer(Layer):
         self.last_input = input_data
         return self.weights[input_data]
 
-    def backward(self, output_gradient: np.ndarray) -> Dict[str, np.ndarray]:
+    def backward(self, output_gradient: np.ndarray) -> LayerGradients:
         expected_shape = self.last_input.shape + (self.embedding_dim,)
         if output_gradient.shape != expected_shape:
             raise ValueError("EmbeddingLayer gradient has the wrong shape")
 
         weight_gradient = np.zeros_like(self.weights)
         np.add.at(weight_gradient, self.last_input, output_gradient)
-        return {"inputs": None, "weights": weight_gradient}
+        return LayerGradients(
+            input_gradient=None, parameter_gradients={"weights": weight_gradient}
+        )
 
     def to_dict(self) -> Dict:
         return {

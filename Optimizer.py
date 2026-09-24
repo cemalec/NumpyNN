@@ -9,7 +9,9 @@ class Optimizer:
         self.type = "Optimizer"
 
     @abstractmethod
-    def step(self, layer: Any, grads: Dict[str, np.ndarray]) -> np.ndarray:
+    def step(
+        self, layer: Any, parameter_gradients: Dict[str, np.ndarray]
+    ) -> np.ndarray:
         pass
 
     @abstractmethod
@@ -28,9 +30,9 @@ class SGD(Optimizer):
         self.learning_rate = learning_rate
         self.type = "SGD"
 
-    def step(self, layer, grads: Dict[str, np.ndarray]) -> np.ndarray:
-        for param_name, grad in grads.items():
-            if grad is None or param_name == "inputs":
+    def step(self, layer, parameter_gradients: Dict[str, np.ndarray]) -> np.ndarray:
+        for param_name, gradient in parameter_gradients.items():
+            if gradient is None:
                 continue
 
             if not hasattr(layer, param_name):
@@ -38,7 +40,7 @@ class SGD(Optimizer):
 
             param_val = getattr(layer, param_name)
             if param_val is not None:
-                setattr(layer, param_name, param_val - self.learning_rate * grad)
+                setattr(layer, param_name, param_val - self.learning_rate * gradient)
 
     def to_dict(self) -> dict:
         return {"learning_rate": self.learning_rate, "type": self.type}
@@ -65,12 +67,14 @@ class RMSProp(Optimizer):
                 if param is not None:
                     self.s[layer.name][attr_name] = np.zeros_like(param)
 
-    def step(self, layer: Any, grads: Dict[str, np.ndarray]) -> np.ndarray:
+    def step(
+        self, layer: Any, parameter_gradients: Dict[str, np.ndarray]
+    ) -> np.ndarray:
         if self.s.get(layer.name) is None:
             self.initialize_state(layer)
 
-        for param_name, grad in grads.items():
-            if grad is None or param_name == "inputs":
+        for param_name, gradient in parameter_gradients.items():
+            if gradient is None:
                 continue
 
             if not hasattr(layer, param_name):
@@ -81,15 +85,15 @@ class RMSProp(Optimizer):
                 continue
 
             if param_name not in self.s[layer.name]:
-                self.s[layer.name][param_name] = np.zeros_like(grad)
+                self.s[layer.name][param_name] = np.zeros_like(gradient)
 
             self.s[layer.name][param_name] = self.beta * self.s[layer.name][
                 param_name
-            ] + (1 - self.beta) * (grad**2)
+            ] + (1 - self.beta) * (gradient**2)
 
             update = (
                 self.learning_rate
-                * grad
+                * gradient
                 / (np.sqrt(self.s[layer.name][param_name]) + self.epsilon)
             )
             setattr(layer, param_name, param_val - update)
@@ -145,15 +149,17 @@ class Adam(Optimizer):
                     self.m[layer.name][attr_name] = np.zeros_like(param)
                     self.v[layer.name][attr_name] = np.zeros_like(param)
 
-    def step(self, layer: Any, grads: Dict[str, np.ndarray]) -> np.ndarray:
+    def step(
+        self, layer: Any, parameter_gradients: Dict[str, np.ndarray]
+    ) -> np.ndarray:
         if self.m.get(layer.name) is None:
             self.initialize_state(layer)
 
         self.t += 1
 
         # Process all gradient keys generically
-        for param_name, grad in grads.items():
-            if grad is None or param_name == "inputs":
+        for param_name, gradient in parameter_gradients.items():
+            if gradient is None:
                 continue
 
             # Check if layer has this parameter and it's learnable
@@ -166,16 +172,17 @@ class Adam(Optimizer):
 
             # Initialize momentum/velocity if needed
             if param_name not in self.m[layer.name]:
-                self.m[layer.name][param_name] = np.zeros_like(grad)
-                self.v[layer.name][param_name] = np.zeros_like(grad)
+                self.m[layer.name][param_name] = np.zeros_like(gradient)
+                self.v[layer.name][param_name] = np.zeros_like(gradient)
 
             # Adam update
             self.m[layer.name][param_name] = (
-                self.beta1 * self.m[layer.name][param_name] + (1 - self.beta1) * grad
+                self.beta1 * self.m[layer.name][param_name]
+                + (1 - self.beta1) * gradient
             )
             self.v[layer.name][param_name] = self.beta2 * self.v[layer.name][
                 param_name
-            ] + (1 - self.beta2) * (grad**2)
+            ] + (1 - self.beta2) * (gradient**2)
 
             m_hat = self.m[layer.name][param_name] / (1 - self.beta1**self.t)
             v_hat = self.v[layer.name][param_name] / (1 - self.beta2**self.t)

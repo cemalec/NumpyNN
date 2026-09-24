@@ -6,6 +6,7 @@ from Layer import (
     DenseLayer,
     EmbeddingLayer,
     FlattenLayer,
+    LayerGradients,
     MaxPoolLayer,
     ReshapeLayer,
 )
@@ -57,8 +58,7 @@ class Model:
         return x
 
     def backward(self, y_true: np.ndarray, y_pred: np.ndarray):
-        loss_grad = self.loss.derivative(y_true, y_pred)
-        grad_dict = {"inputs": loss_grad}
+        upstream_gradient = self.loss.derivative(y_true, y_pred)
         last_layer_index = len(self.layers) - 1
         uses_fused_softmax_cross_entropy = (
             isinstance(self.loss, CrossEntropyLoss)
@@ -69,21 +69,16 @@ class Model:
         for layer_index in range(last_layer_index, -1, -1):
             layer = self.layers[layer_index]
             if layer_index == last_layer_index and uses_fused_softmax_cross_entropy:
-                grad_dict = layer.backward(
-                    grad_dict["inputs"], apply_activation_derivative=False
+                gradients = layer.backward(
+                    upstream_gradient, apply_activation_derivative=False
                 )
             else:
-                grad_dict = layer.backward(grad_dict["inputs"])
+                gradients = layer.backward(upstream_gradient)
 
-            # Check if any gradient exists for layer parameters (excluding 'inputs')
-            has_learnable_params = any(
-                grad_dict.get(param) is not None
-                for param in grad_dict.keys()
-                if param != "inputs"
-            )
+            if gradients.parameter_gradients:
+                self.optimizer.step(layer, gradients.parameter_gradients)
 
-            if has_learnable_params:
-                self.optimizer.step(layer, grad_dict)
+            upstream_gradient = gradients.input_gradient
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         return self.forward(x, training=False)

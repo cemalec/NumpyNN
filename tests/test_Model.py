@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from Model import Model
-from Layer import BatchNormLayer, DenseLayer, EmbeddingLayer
+from Layer import BatchNormLayer, DenseLayer, EmbeddingLayer, LayerGradients
 from Optimizer import Optimizer, SGD
 from DifferentiableFunction import CrossEntropyLoss, DifferentiableFunction, SoftMax
 
@@ -19,9 +19,9 @@ class DummyLayer(DenseLayer):
         self.inputs = inputs
         return inputs + 1  # simple operation for testing
 
-    def backward(self, grad_outputs: np.ndarray) -> dict:
+    def backward(self, grad_outputs: np.ndarray) -> LayerGradients:
         grad_inputs = grad_outputs  # pass gradient unchanged
-        return {"inputs": grad_inputs}
+        return LayerGradients(input_gradient=grad_inputs, parameter_gradients={})
 
 
 dummy_layer = DummyLayer(2, 2, activation_function=dummy_activation)

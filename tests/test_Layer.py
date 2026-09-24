@@ -137,18 +137,18 @@ def test_cnn_layer_backward():
     output_gradient = np.random.randn(*output.shape).astype(float)
 
     # Backward pass
-    grad_dict = layer.backward(output_gradient)
+    gradients = layer.backward(output_gradient)
 
     # Check gradient shapes
     assert (
-        grad_dict["inputs"].shape == input_data.shape
-    ), f"Input gradient shape {grad_dict['inputs'].shape} != input shape {input_data.shape}"
+        gradients.input_gradient.shape == input_data.shape
+    ), f"Input gradient shape {gradients.input_gradient.shape} != input shape {input_data.shape}"
     assert (
-        grad_dict["weights"].shape == layer.weights.shape
-    ), f"Weight gradient shape {grad_dict['weights'].shape} != weights shape {layer.weights.shape}"
+        gradients.parameter_gradients["weights"].shape == layer.weights.shape
+    ), f"Weight gradient shape {gradients.parameter_gradients['weights'].shape} != weights shape {layer.weights.shape}"
     assert (
-        grad_dict["biases"].shape == layer.biases.shape
-    ), f"Bias gradient shape {grad_dict['biases'].shape} != biases shape {layer.biases.shape}"
+        gradients.parameter_gradients["biases"].shape == layer.biases.shape
+    ), f"Bias gradient shape {gradients.parameter_gradients['biases'].shape} != biases shape {layer.biases.shape}"
 
 
 def test_cnn_padding_and_activation():
@@ -170,7 +170,7 @@ def test_cnn_padding_and_activation():
 
     assert output.shape == (2, 1, 5, 6)
     assert np.all(output >= 0)
-    assert gradients["inputs"].shape == (2, 1, 3, 4)
+    assert gradients.input_gradient.shape == (2, 1, 3, 4)
 
 
 def test_flatten_layer_forward():
@@ -200,14 +200,13 @@ def test_flatten_layer_backward():
     output_gradient = np.random.randn(*output.shape).astype(float)
 
     # Backward pass
-    grad_dict = layer.backward(output_gradient)
+    gradients = layer.backward(output_gradient)
 
     # Input gradient should match original input shape
     assert (
-        grad_dict["inputs"].shape == input_data.shape
-    ), f"Input gradient shape {grad_dict['inputs'].shape} != input shape {input_data.shape}"
-    assert grad_dict["weights"] is None
-    assert grad_dict["biases"] is None
+        gradients.input_gradient.shape == input_data.shape
+    ), f"Input gradient shape {gradients.input_gradient.shape} != input shape {input_data.shape}"
+    assert gradients.parameter_gradients == {}
 
 
 def test_reshape_layer_forward():
@@ -237,14 +236,13 @@ def test_reshape_layer_backward():
     output_gradient = np.random.randn(*output.shape).astype(float)
 
     # Backward pass
-    grad_dict = layer.backward(output_gradient)
+    gradients = layer.backward(output_gradient)
 
     # Input gradient should match original input shape
     assert (
-        grad_dict["inputs"].shape == input_data.shape
-    ), f"Input gradient shape {grad_dict['inputs'].shape} != input shape {input_data.shape}"
-    assert grad_dict["weights"] is None
-    assert grad_dict["biases"] is None
+        gradients.input_gradient.shape == input_data.shape
+    ), f"Input gradient shape {gradients.input_gradient.shape} != input shape {input_data.shape}"
+    assert gradients.parameter_gradients == {}
 
 
 def test_cnn_to_dict_and_from_dict():
@@ -352,18 +350,18 @@ def test_batchnorm_layer_backward():
     output_gradient = np.random.randn(*output.shape).astype(float)
 
     # Backward pass
-    grad_dict = layer.backward(output_gradient)
+    gradients = layer.backward(output_gradient)
 
     # Check gradient shapes
     assert (
-        grad_dict["inputs"].shape == input_data.shape
-    ), f"Input gradient shape {grad_dict['inputs'].shape} != input shape {input_data.shape}"
-    assert grad_dict["gamma"].shape == (
+        gradients.input_gradient.shape == input_data.shape
+    ), f"Input gradient shape {gradients.input_gradient.shape} != input shape {input_data.shape}"
+    assert gradients.parameter_gradients["gamma"].shape == (
         num_features,
-    ), f"Gamma gradient shape {grad_dict['gamma'].shape} != expected (num_features,)"
-    assert grad_dict["beta"].shape == (
+    ), f"Gamma gradient shape {gradients.parameter_gradients['gamma'].shape} != expected (num_features,)"
+    assert gradients.parameter_gradients["beta"].shape == (
         num_features,
-    ), f"Beta gradient shape {grad_dict['beta'].shape} != expected (num_features,)"
+    ), f"Beta gradient shape {gradients.parameter_gradients['beta'].shape} != expected (num_features,)"
 
 
 def test_batchnorm_layer_backward_4d():
@@ -381,18 +379,18 @@ def test_batchnorm_layer_backward_4d():
     output_gradient = np.random.randn(*output.shape).astype(float)
 
     # Backward pass
-    grad_dict = layer.backward(output_gradient)
+    gradients = layer.backward(output_gradient)
 
     # Check gradient shapes
     assert (
-        grad_dict["inputs"].shape == input_data.shape
-    ), f"Input gradient shape {grad_dict['inputs'].shape} != input shape {input_data.shape}"
-    assert grad_dict["gamma"].shape == (
+        gradients.input_gradient.shape == input_data.shape
+    ), f"Input gradient shape {gradients.input_gradient.shape} != input shape {input_data.shape}"
+    assert gradients.parameter_gradients["gamma"].shape == (
         channels,
-    ), f"Gamma gradient shape {grad_dict['gamma'].shape} != expected ({channels},)"
-    assert grad_dict["beta"].shape == (
+    ), f"Gamma gradient shape {gradients.parameter_gradients['gamma'].shape} != expected ({channels},)"
+    assert gradients.parameter_gradients["beta"].shape == (
         channels,
-    ), f"Beta gradient shape {grad_dict['beta'].shape} != expected ({channels},)"
+    ), f"Beta gradient shape {gradients.parameter_gradients['beta'].shape} != expected ({channels},)"
 
 
 def test_batchnorm_4d_input_gradient_matches_finite_difference():
@@ -402,7 +400,7 @@ def test_batchnorm_4d_input_gradient_matches_finite_difference():
     layer = BatchNormLayer(num_features=3, momentum=1.0, name="test_bn_gradient")
 
     layer.forward(inputs)
-    analytic_gradient = layer.backward(output_gradient)["inputs"]
+    analytic_gradient = layer.backward(output_gradient).input_gradient
     numerical_gradient = np.zeros_like(inputs)
     epsilon = 1e-6
     for index in np.ndindex(inputs.shape):
@@ -532,9 +530,10 @@ def test_embedding_layer_accumulates_repeated_token_gradients():
 
     gradients = layer.backward(np.array([[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]]))
 
-    assert gradients["inputs"] is None
+    assert gradients.input_gradient is None
     np.testing.assert_array_equal(
-        gradients["weights"], np.array([[0.0, 0.0], [4.0, 6.0], [5.0, 6.0]])
+        gradients.parameter_gradients["weights"],
+        np.array([[0.0, 0.0], [4.0, 6.0], [5.0, 6.0]]),
     )
 
 
@@ -554,7 +553,7 @@ def test_embedding_weight_gradient_matches_finite_difference():
     token_ids = np.array([[0, 1, 0]])
     output_gradient = np.array([[[0.7, -0.1], [0.2, 0.5], [-0.3, 0.4]]])
     layer.forward(token_ids)
-    analytic_gradient = layer.backward(output_gradient)["weights"]
+    analytic_gradient = layer.backward(output_gradient).parameter_gradients["weights"]
     epsilon = 1e-6
     index = (0, 1)
     original_value = layer.weights[index]
